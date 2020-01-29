@@ -348,11 +348,6 @@ if host_machine.system() != 'windows'
   endif
 endif
 
-#################
-# GNOME support #
-#################
-enable_gnome = get_option('gnome')
-
 #########################
 # GObject introspection #
 #########################
