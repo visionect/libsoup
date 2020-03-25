@@ -14,6 +14,7 @@
 #include "soup-session.h"
 #include "soup.h"
 #include "auth/soup-auth-manager.h"
+#include "auth/soup-auth-ntlm.h"
 #include "cache/soup-cache-private.h"
 #include "soup-connection.h"
 #include "soup-message-private.h"
@@ -68,6 +69,10 @@
 static guint soup_host_uri_hash (gconstpointer key);
 static gboolean soup_host_uri_equal (gconstpointer v1, gconstpointer v2);
 static void free_unused_host (SoupSessionHost *host, gpointer session);
+
+struct _SoupSession {
+	GObject parent;
+};
 
 typedef struct {
 	gboolean disposed;
@@ -2459,7 +2464,7 @@ soup_session_class_init (SoupSessionClass *session_class)
 		g_signal_new ("request-started",
 			      G_OBJECT_CLASS_TYPE (object_class),
 			      G_SIGNAL_RUN_FIRST,
-			      G_STRUCT_OFFSET (SoupSessionClass, request_started),
+			      0,
 			      NULL, NULL,
 			      NULL,
 			      G_TYPE_NONE, 1,
@@ -2514,7 +2519,7 @@ soup_session_class_init (SoupSessionClass *session_class)
 		g_signal_new ("authenticate",
 			      G_OBJECT_CLASS_TYPE (object_class),
 			      G_SIGNAL_RUN_FIRST,
-			      G_STRUCT_OFFSET (SoupSessionClass, authenticate),
+			      0,
 			      NULL, NULL,
 			      NULL,
 			      G_TYPE_NONE, 3,
