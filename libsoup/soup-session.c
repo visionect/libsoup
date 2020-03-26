@@ -138,6 +138,14 @@ static void async_run_queue (SoupSession *session);
 
 static void async_send_request_running (SoupSession *session, SoupMessageQueueItem *item);
 
+static void soup_session_kick_queue (SoupSession *session);
+
+static void
+soup_session_process_queue_item (SoupSession          *session,
+				 SoupMessageQueueItem *item,
+				 gboolean             *should_cleanup,
+				 gboolean              loop);
+
 #define SOUP_SESSION_MAX_CONNS_DEFAULT 10
 #define SOUP_SESSION_MAX_CONNS_PER_HOST_DEFAULT 2
 
@@ -925,7 +933,7 @@ message_restarted (SoupMessage *msg, gpointer user_data)
 	soup_message_cleanup_response (msg);
 }
 
-SoupMessageQueueItem *
+static SoupMessageQueueItem *
 soup_session_append_queue_item (SoupSession *session, SoupMessage *msg,
 				gboolean async, gboolean new_api,
 				SoupSessionCallback callback, gpointer user_data)
@@ -1536,7 +1544,7 @@ get_connection (SoupMessageQueueItem *item, gboolean *should_cleanup)
 	}
 }
 
-void
+static void
 soup_session_process_queue_item (SoupSession          *session,
 				 SoupMessageQueueItem *item,
 				 gboolean             *should_cleanup,
@@ -1853,7 +1861,7 @@ soup_session_pause_message (SoupSession *session,
 	soup_message_queue_item_unref (item);
 }
 
-void
+static void
 soup_session_kick_queue (SoupSession *session)
 {
 	SoupSessionPrivate *priv = soup_session_get_instance_private (session);
