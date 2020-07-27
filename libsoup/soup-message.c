@@ -170,9 +170,9 @@ soup_message_finalize (GObject *object)
 
 	soup_message_io_cleanup (msg);
 
-	g_clear_pointer (&priv->uri, soup_uri_free);
-	g_clear_pointer (&priv->first_party, soup_uri_free);
-	g_clear_pointer (&priv->site_for_cookies, soup_uri_free);
+	g_clear_pointer (&priv->uri, g_uri_unref);
+	g_clear_pointer (&priv->first_party, g_uri_unref);
+	g_clear_pointer (&priv->site_for_cookies, g_uri_unref);
 
 	g_clear_object (&priv->auth);
 	g_clear_object (&priv->proxy_auth);
@@ -705,14 +705,14 @@ soup_message_class_init (SoupMessageClass *message_class)
 	 * SOUP_MESSAGE_URI:
 	 *
 	 * Alias for the #SoupMessage:uri property. (The message's
-	 * #SoupURI.)
+	 * #GUri.)
 	 **/
 	g_object_class_install_property (
 		object_class, PROP_URI,
 		g_param_spec_boxed (SOUP_MESSAGE_URI,
 				    "URI",
 				    "The message's Request-URI",
-				    SOUP_TYPE_URI,
+				    G_TYPE_URI,
 				    G_PARAM_READWRITE |
 				    G_PARAM_STATIC_STRINGS));
 	/**
@@ -791,7 +791,7 @@ soup_message_class_init (SoupMessageClass *message_class)
 	 * SOUP_MESSAGE_FIRST_PARTY:
 	 *
 	 * Alias for the #SoupMessage:first-party property. (The
-	 * #SoupURI loaded in the application when the message was
+	 * #GUri loaded in the application when the message was
 	 * queued.)
 	 *
 	 * Since: 2.30
@@ -799,7 +799,7 @@ soup_message_class_init (SoupMessageClass *message_class)
 	/**
 	 * SoupMessage:first-party:
 	 *
-	 * The #SoupURI loaded in the application when the message was
+	 * The #GUri loaded in the application when the message was
 	 * queued.
 	 *
 	 * Since: 2.30
@@ -809,7 +809,7 @@ soup_message_class_init (SoupMessageClass *message_class)
 		g_param_spec_boxed (SOUP_MESSAGE_FIRST_PARTY,
 				    "First party",
 				    "The URI loaded in the application when the message was requested.",
-				    SOUP_TYPE_URI,
+				    G_TYPE_URI,
 				    G_PARAM_READWRITE |
 				    G_PARAM_STATIC_STRINGS));
 	/**
@@ -824,7 +824,7 @@ soup_message_class_init (SoupMessageClass *message_class)
 		g_param_spec_boxed (SOUP_MESSAGE_SITE_FOR_COOKIES,
 				    "Site for cookies",
 				    "The URI for the site to compare cookies against",
-				    SOUP_TYPE_URI,
+				    G_TYPE_URI,
 				    G_PARAM_READWRITE));
 	/**
 	 * SoupMessage:is-top-level-navigation:
@@ -1022,35 +1022,35 @@ SoupMessage *
 soup_message_new (const char *method, const char *uri_string)
 {
 	SoupMessage *msg;
-	SoupURI *uri;
+	GUri *uri;
 
 	g_return_val_if_fail (method != NULL, NULL);
 	g_return_val_if_fail (uri_string != NULL, NULL);
 
-	uri = soup_uri_new (uri_string);
+	uri = soup_uri_parse_normalized (NULL, uri_string, NULL);
 	if (!uri)
 		return NULL;
-	if (!uri->host) {
-		soup_uri_free (uri);
+	if (!g_uri_get_host (uri)) {
+		g_uri_unref (uri);
 		return NULL;
 	}
 
 	msg = soup_message_new_from_uri (method, uri);
-	soup_uri_free (uri);
+	g_uri_unref (uri);
 	return msg;
 }
 
 /**
  * soup_message_new_from_uri:
  * @method: the HTTP method for the created request
- * @uri: the destination endpoint (as a #SoupURI)
+ * @uri: the destination endpoint (as a #GUri)
  * 
  * Creates a new empty #SoupMessage, which will connect to @uri
  *
  * Return value: the new #SoupMessage
  */
 SoupMessage *
-soup_message_new_from_uri (const char *method, SoupURI *uri)
+soup_message_new_from_uri (const char *method, GUri *uri)
 {
 	return g_object_new (SOUP_TYPE_MESSAGE,
 			     SOUP_MESSAGE_METHOD, method,
@@ -1676,14 +1676,14 @@ soup_message_is_keepalive (SoupMessage *msg)
 /**
  * soup_message_set_uri:
  * @msg: a #SoupMessage
- * @uri: the new #SoupURI
+ * @uri: the new #GUri
  *
  * Sets @msg's URI to @uri. If @msg has already been sent and you want
  * to re-send it with the new URI, you need to call
  * soup_session_requeue_message().
  **/
 void
-soup_message_set_uri (SoupMessage *msg, SoupURI *uri)
+soup_message_set_uri (SoupMessage *msg, GUri *uri)
 {
 	SoupMessagePrivate *priv;
 
@@ -1691,8 +1691,8 @@ soup_message_set_uri (SoupMessage *msg, SoupURI *uri)
 	priv = soup_message_get_instance_private (msg);
 
 	if (priv->uri)
-		soup_uri_free (priv->uri);
-	priv->uri = soup_uri_copy (uri);
+		g_uri_unref (priv->uri);
+	priv->uri = soup_normalize_uri (uri);
 
 	g_object_notify (G_OBJECT (msg), SOUP_MESSAGE_URI);
 }
@@ -1705,7 +1705,7 @@ soup_message_set_uri (SoupMessage *msg, SoupURI *uri)
  *
  * Return value: (transfer none): the URI @msg is targeted for.
  **/
-SoupURI *
+GUri *
 soup_message_get_uri (SoupMessage *msg)
 {
 	SoupMessagePrivate *priv;
@@ -1866,13 +1866,13 @@ soup_message_get_disabled_features (SoupMessage *msg)
  * soup_message_get_first_party:
  * @msg: a #SoupMessage
  *
- * Gets @msg's first-party #SoupURI
+ * Gets @msg's first-party #GUri
  * 
- * Returns: (transfer none): the @msg's first party #SoupURI
+ * Returns: (transfer none): the @msg's first party #GUri
  * 
  * Since: 2.30
  **/
-SoupURI *
+GUri *
 soup_message_get_first_party (SoupMessage *msg)
 {
 	SoupMessagePrivate *priv;
@@ -1886,9 +1886,9 @@ soup_message_get_first_party (SoupMessage *msg)
 /**
  * soup_message_set_first_party:
  * @msg: a #SoupMessage
- * @first_party: the #SoupURI for the @msg's first party
+ * @first_party: the #GUri for the @msg's first party
  * 
- * Sets @first_party as the main document #SoupURI for @msg. For
+ * Sets @first_party as the main document #GUri for @msg. For
  * details of when and how this is used refer to the documentation for
  * #SoupCookieJarAcceptPolicy.
  *
@@ -1896,23 +1896,27 @@ soup_message_get_first_party (SoupMessage *msg)
  **/
 void
 soup_message_set_first_party (SoupMessage *msg,
-			      SoupURI     *first_party)
+			      GUri        *first_party)
 {
 	SoupMessagePrivate *priv;
+        GUri *normalized_first_party;
 
 	g_return_if_fail (SOUP_IS_MESSAGE (msg));
 	g_return_if_fail (first_party != NULL);
 
 	priv = soup_message_get_instance_private (msg);
+        normalized_first_party = soup_normalize_uri (first_party);
 
 	if (priv->first_party) {
-		if (soup_uri_equal (priv->first_party, first_party))
+		if (soup_uri_equal (priv->first_party, normalized_first_party)) {
+                        g_uri_unref (normalized_first_party);
 			return;
+                }
 
-		soup_uri_free (priv->first_party);
+		g_uri_unref (priv->first_party);
 	}
 
-	priv->first_party = soup_uri_copy (first_party);
+	priv->first_party = g_steal_pointer (&normalized_first_party);
 	g_object_notify (G_OBJECT (msg), SOUP_MESSAGE_FIRST_PARTY);
 }
 
@@ -1920,13 +1924,13 @@ soup_message_set_first_party (SoupMessage *msg,
  * soup_message_get_site_for_cookies:
  * @msg: a #SoupMessage
  *
- * Gets @msg's site for cookies #SoupURI
+ * Gets @msg's site for cookies #GUri
  *
- * Returns: (transfer none): the @msg's site for cookies #SoupURI
+ * Returns: (transfer none): the @msg's site for cookies #GUri
  *
  * Since: 2.70
  **/
-SoupURI *
+GUri *
 soup_message_get_site_for_cookies (SoupMessage *msg)
 {
 	SoupMessagePrivate *priv;
@@ -1940,7 +1944,7 @@ soup_message_get_site_for_cookies (SoupMessage *msg)
 /**
  * soup_message_set_site_for_cookies:
  * @msg: a #SoupMessage
- * @site_for_cookies: (nullable): the #SoupURI for the @msg's site for cookies
+ * @site_for_cookies: (nullable): the #GUri for the @msg's site for cookies
  *
  * Sets @site_for_cookies as the policy URL for same-site cookies for @msg.
  *
@@ -1955,9 +1959,10 @@ soup_message_get_site_for_cookies (SoupMessage *msg)
  **/
 void
 soup_message_set_site_for_cookies (SoupMessage *msg,
-			           SoupURI     *site_for_cookies)
+			           GUri     *site_for_cookies)
 {
 	SoupMessagePrivate *priv;
+        GUri *normalized_site = NULL;
 
 	g_return_if_fail (SOUP_IS_MESSAGE (msg));
 
@@ -1966,14 +1971,19 @@ soup_message_set_site_for_cookies (SoupMessage *msg,
 	if (priv->site_for_cookies == site_for_cookies)
 		return;
 
-	if (priv->site_for_cookies) {
-		if (site_for_cookies && soup_uri_equal (priv->site_for_cookies, site_for_cookies))
-			return;
+        if (site_for_cookies)
+                normalized_site = soup_normalize_uri (site_for_cookies);
 
-		soup_uri_free (priv->site_for_cookies);
+	if (priv->site_for_cookies) {
+		if (normalized_site && soup_uri_equal (priv->site_for_cookies, normalized_site)) {
+                        g_uri_unref (normalized_site);
+			return;
+                }
+
+		g_uri_unref (priv->site_for_cookies);
 	}
 
-	priv->site_for_cookies = site_for_cookies ? soup_uri_copy (site_for_cookies) : NULL;
+	priv->site_for_cookies = normalized_site;
 	g_object_notify (G_OBJECT (msg), SOUP_MESSAGE_SITE_FOR_COOKIES);
 }
 
@@ -2107,18 +2117,18 @@ void
 soup_message_set_redirect (SoupMessage *msg, guint status_code,
 			   const char *redirect_uri)
 {
-	SoupURI *location;
+	GUri *location;
 	char *location_str;
 
-	location = soup_uri_new_with_base (soup_message_get_uri (msg), redirect_uri);
+	location = soup_uri_parse_normalized (soup_message_get_uri (msg), redirect_uri, NULL);
 	g_return_if_fail (location != NULL);
 
 	soup_message_set_status (msg, status_code);
-	location_str = soup_uri_to_string (location, FALSE);
+	location_str = g_uri_to_string (location);
 	soup_message_headers_replace (msg->response_headers, "Location",
 				      location_str);
 	g_free (location_str);
-	soup_uri_free (location);
+	g_uri_unref (location);
 }
 
 void

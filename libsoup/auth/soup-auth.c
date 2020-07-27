@@ -243,7 +243,7 @@ soup_auth_new (GType type, SoupMessage *msg, const char *auth_header)
 
 	auth = g_object_new (type,
 			     SOUP_AUTH_IS_FOR_PROXY, (msg->status_code == SOUP_STATUS_PROXY_UNAUTHORIZED),
-			     SOUP_AUTH_HOST, soup_message_get_uri (msg)->host,
+			     SOUP_AUTH_HOST, g_uri_get_host (soup_message_get_uri (msg)),
 			     NULL);
 
 	SoupAuthPrivate *priv = soup_auth_get_instance_private (auth);
@@ -538,12 +538,15 @@ soup_auth_can_authenticate (SoupAuth *auth)
  * paths, which can be freed with soup_auth_free_protection_space().
  **/
 GSList *
-soup_auth_get_protection_space (SoupAuth *auth, SoupURI *source_uri)
+soup_auth_get_protection_space (SoupAuth *auth, GUri *source_uri)
 {
 	g_return_val_if_fail (SOUP_IS_AUTH (auth), NULL);
 	g_return_val_if_fail (source_uri != NULL, NULL);
 
-	return SOUP_AUTH_GET_CLASS (auth)->get_protection_space (auth, source_uri);
+        GUri *normalized_source_uri = soup_normalize_uri (source_uri);
+	GSList *ret = SOUP_AUTH_GET_CLASS (auth)->get_protection_space (auth, source_uri);
+        g_uri_unref (normalized_source_uri);
+        return ret;
 }
 
 /**

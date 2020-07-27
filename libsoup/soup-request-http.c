@@ -67,13 +67,13 @@ soup_request_http_init (SoupRequestHTTP *http)
 
 static gboolean
 soup_request_http_check_uri (SoupRequest  *request,
-			     SoupURI      *uri,
+			     GUri      *uri,
 			     GError      **error)
 {
 	SoupRequestHTTP *http = SOUP_REQUEST_HTTP (request);
         SoupRequestHTTPPrivate *priv = soup_request_http_get_instance_private (http);
 
-	if (!SOUP_URI_VALID_FOR_HTTP (uri))
+	if (!soup_uri_valid_for_http (uri, error))
 		return FALSE;
 
 	priv->msg = soup_message_new_from_uri (SOUP_METHOD_GET, uri);

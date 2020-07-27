@@ -74,16 +74,17 @@ soup_request_file_finalize (GObject *object)
 
 static gboolean
 soup_request_file_check_uri (SoupRequest  *request,
-			     SoupURI      *uri,
+			     GUri         *uri,
 			     GError      **error)
 {
+        const char *host = g_uri_get_host (uri);
 	/* "file:/foo" is not valid */
-	if (!uri->host)
+	if (!host)
 		return FALSE;
 
 	/* but it must be "file:///..." or "file://localhost/..." */
-	if (*uri->host &&
-	    g_ascii_strcasecmp (uri->host, "localhost") != 0)
+	if (*host &&
+	    g_ascii_strcasecmp (host, "localhost") != 0)
 		return FALSE;
 	return TRUE;
 }
@@ -127,20 +128,20 @@ soup_request_file_ensure_file (SoupRequestFile  *file,
 			       GError          **error)
 {
         SoupRequestFilePrivate *priv = soup_request_file_get_instance_private (file);
-	SoupURI *uri;
+	GUri *uri;
 	char *decoded_path;
 
 	if (priv->gfile)
 		return TRUE;
 
 	uri = soup_request_get_uri (SOUP_REQUEST (file));
-	decoded_path = soup_uri_decode (uri->path);
+	decoded_path = g_uri_unescape_string (g_uri_get_path (uri), NULL);
 
 #ifdef G_OS_WIN32
 	windowsify_file_uri_path (decoded_path);
 #endif
 
-	if (uri->scheme == SOUP_URI_SCHEME_RESOURCE) {
+	if (!g_ascii_strcasecmp (g_uri_get_scheme (uri), "resource")) {
 		char *uri_str;
 
 		uri_str = g_strdup_printf ("resource://%s", decoded_path);

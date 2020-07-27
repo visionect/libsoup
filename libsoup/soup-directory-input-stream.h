@@ -54,7 +54,7 @@ struct _SoupDirectoryInputStreamClass {
 GType         soup_directory_input_stream_get_type (void);
 
 GInputStream *soup_directory_input_stream_new      (GFileEnumerator *enumerator,
-						    SoupURI         *uri);
+						    GUri            *uri);
 
 
 G_END_DECLS

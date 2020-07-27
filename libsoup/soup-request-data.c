@@ -67,10 +67,10 @@ soup_request_data_finalize (GObject *object)
 
 static gboolean
 soup_request_data_check_uri (SoupRequest  *request,
-			     SoupURI      *uri,
+			     GUri         *uri,
 			     GError      **error)
 {
-	return uri->host == NULL;
+	return g_uri_get_host (uri) == NULL;
 }
 
 #define BASE64_INDICATOR     ";base64"
@@ -83,13 +83,13 @@ soup_request_data_send (SoupRequest   *request,
 {
 	SoupRequestData *data = SOUP_REQUEST_DATA (request);
         SoupRequestDataPrivate *priv = soup_request_data_get_instance_private (data);
-	SoupURI *uri = soup_request_get_uri (request);
+	GUri *uri = soup_request_get_uri (request);
 	GInputStream *memstream;
 	const char *comma, *start, *end;
 	gboolean base64 = FALSE;
 	char *uristr;
 
-	uristr = soup_uri_to_string (uri, FALSE);
+	uristr = g_uri_to_string (uri);
 	start = uristr + 5;
 	comma = strchr (start, ',');
 	if (comma && comma != start) {
@@ -101,7 +101,7 @@ soup_request_data_send (SoupRequest   *request,
 			end = comma;
 
 		if (end != start)
-			priv->content_type = soup_uri_decoded_copy (start, end - start, NULL);
+			priv->content_type = g_uri_unescape_segment (start, end, NULL);
 	}
 
 	memstream = g_memory_input_stream_new ();
@@ -110,17 +110,18 @@ soup_request_data_send (SoupRequest   *request,
 		start = comma + 1;
 
 	if (*start) {
-		int decoded_length = 0;
-		guchar *buf = (guchar *) soup_uri_decoded_copy (start, strlen (start),
-								&decoded_length);
+		GBytes *buf = g_uri_unescape_bytes (start, -1, NULL, NULL);
+                gsize data_len;
+                guchar *data = g_bytes_unref_to_data (buf, &data_len);
 
 		if (base64)
-			buf = g_base64_decode_inplace ((gchar*) buf, &priv->content_length);
+			g_base64_decode_inplace ((char*)data, &priv->content_length);
 		else
-			priv->content_length = decoded_length;
+			priv->content_length = data_len;
 
 		g_memory_input_stream_add_data (G_MEMORY_INPUT_STREAM (memstream),
-						buf, priv->content_length,
+						data,
+                                                priv->content_length,
 						g_free);
 	}
 	g_free (uristr);

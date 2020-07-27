@@ -919,10 +919,10 @@ static SoupServerHandler *
 get_handler (SoupServer *server, SoupMessage *msg)
 {
 	SoupServerPrivate *priv = soup_server_get_instance_private (server);
-	SoupURI *uri;
+	GUri *uri;
 
 	uri = soup_message_get_uri (msg);
-	return soup_path_map_lookup (priv->handlers, NORMALIZED_PATH (uri->path));
+	return soup_path_map_lookup (priv->handlers, NORMALIZED_PATH (g_uri_get_path (uri)));
 }
 
 static void
@@ -931,7 +931,7 @@ call_handler (SoupServer *server, SoupServerHandler *handler,
 	      gboolean early)
 {
 	GHashTable *form_data_set;
-	SoupURI *uri;
+	GUri *uri;
 
 	if (early && !handler->early_callback)
 		return;
@@ -942,23 +942,40 @@ call_handler (SoupServer *server, SoupServerHandler *handler,
 		return;
 
 	uri = soup_message_get_uri (msg);
-	if (uri->query)
-		form_data_set = soup_form_decode (uri->query);
+	if (g_uri_get_query (uri))
+		form_data_set = soup_form_decode (g_uri_get_query (uri));
 	else
 		form_data_set = NULL;
 
 	if (early) {
 		(*handler->early_callback) (server, msg,
-					    uri->path, form_data_set,
+					    g_uri_get_path (uri), form_data_set,
 					    client, handler->early_user_data);
 	} else {
 		(*handler->callback) (server, msg,
-				      uri->path, form_data_set,
+				      g_uri_get_path (uri), form_data_set,
 				      client, handler->user_data);
 	}
 
 	if (form_data_set)
 		g_hash_table_unref (form_data_set);
+}
+
+static GUri *
+uri_set_path (GUri *uri, const char *path)
+{
+        return g_uri_build_with_user (
+                g_uri_get_flags (uri) ^ G_URI_FLAGS_ENCODED_PATH,
+                g_uri_get_scheme (uri),
+                g_uri_get_user (uri),
+                g_uri_get_password (uri),
+                g_uri_get_auth_params (uri),
+                g_uri_get_host (uri),
+                g_uri_get_port (uri),
+                path,
+                g_uri_get_query (uri),
+                g_uri_get_fragment (uri)
+        );
 }
 
 static void
@@ -967,7 +984,7 @@ got_headers (SoupMessage *msg, SoupClientContext *client)
 	SoupServer *server = client->server;
 	SoupServerPrivate *priv = soup_server_get_instance_private (server);
 	SoupServerHandler *handler;
-	SoupURI *uri;
+	GUri *uri;
 	GDateTime *date;
 	char *date_string;
 	SoupAuthDomain *domain;
@@ -993,10 +1010,10 @@ got_headers (SoupMessage *msg, SoupClientContext *client)
 		return;
 	}
 
-	if (!priv->raw_paths) {
+	if (!priv->raw_paths && g_uri_get_flags (uri) & G_URI_FLAGS_ENCODED_PATH) {
 		char *decoded_path;
 
-		decoded_path = soup_uri_decode (uri->path);
+                decoded_path = g_uri_unescape_string (g_uri_get_path (uri), NULL);
 
 		if (strstr (decoded_path, "/../") ||
 		    g_str_has_suffix (decoded_path, "/..")
@@ -1014,7 +1031,8 @@ got_headers (SoupMessage *msg, SoupClientContext *client)
 			return;
 		}
 
-		soup_uri_set_path (uri, decoded_path);
+                uri = uri_set_path (uri, decoded_path);
+                soup_message_set_uri (msg, uri);
 		g_free (decoded_path);
 	}
 
@@ -1060,7 +1078,7 @@ complete_websocket_upgrade (SoupMessage *msg, gpointer user_data)
 {
 	SoupClientContext *client = user_data;
 	SoupServer *server = client->server;
-	SoupURI *uri = soup_message_get_uri (msg);
+	GUri *uri = soup_message_get_uri (msg);
 	SoupServerHandler *handler;
 	GIOStream *stream;
 	SoupWebsocketConnection *conn;
@@ -1080,7 +1098,7 @@ complete_websocket_upgrade (SoupMessage *msg, gpointer user_data)
 	g_object_unref (stream);
 	soup_client_context_unref (client);
 
-	(*handler->websocket_callback) (server, conn, uri->path, client,
+	(*handler->websocket_callback) (server, conn, g_uri_get_path (uri), client,
 					handler->websocket_user_data);
 	g_object_unref (conn);
 	soup_client_context_unref (client);
@@ -1637,8 +1655,8 @@ soup_server_listen_socket (SoupServer *server, GSocket *socket,
  * <literal>::</literal>, rather than actually returning separate URIs
  * for each interface on the system.
  *
- * Return value: (transfer full) (element-type Soup.URI): a list of
- * #SoupURIs, which you must free when you are done with it.
+ * Return value: (transfer full) (element-type GUri): a list of
+ * #GUris, which you must free when you are done with it.
  *
  * Since: 2.48
  */
@@ -1651,7 +1669,8 @@ soup_server_get_uris (SoupServer *server)
 	GInetSocketAddress *addr;
 	GInetAddress *inet_addr;
 	char *ip;
-	SoupURI *uri;
+        int port;
+	GUri *uri;
 	gpointer creds;
 
 	g_return_val_if_fail (SOUP_IS_SERVER (server), NULL);
@@ -1662,13 +1681,15 @@ soup_server_get_uris (SoupServer *server)
 		addr = soup_socket_get_local_address (listener);
 		inet_addr = g_inet_socket_address_get_address (addr);
 		ip = g_inet_address_to_string (inet_addr);
+                port = g_inet_socket_address_get_port (addr);
 		g_object_get (G_OBJECT (listener), SOUP_SOCKET_SSL_CREDENTIALS, &creds, NULL);
 
-		uri = soup_uri_new (NULL);
-		soup_uri_set_scheme (uri, creds ? "https" : "http");
-		soup_uri_set_host (uri, ip);
-		soup_uri_set_port (uri, g_inet_socket_address_get_port (addr));
-		soup_uri_set_path (uri, "/");
+                if (port == 0)
+                        port = -1;
+
+                uri = g_uri_build (SOUP_HTTP_URI_FLAGS,
+                                   creds ? "https" : "http",
+                                   NULL, ip, port, "/", NULL, NULL);
 
 		uris = g_slist_prepend (uris, uri);
 

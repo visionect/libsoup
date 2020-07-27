@@ -7,11 +7,10 @@
 #define __SOUP_SESSION_PRIVATE_H__ 1
 
 #include "soup-session.h"
-#include "soup-uri.h"
 
 G_BEGIN_DECLS
 
-SoupURI *soup_session_get_message_proxy_uri (SoupSession *session,
+GUri    *soup_session_get_message_proxy_uri (SoupSession *session,
 					     SoupMessage *msg);
 void     soup_session_requeue_message       (SoupSession *session,
 					     SoupMessage *msg);

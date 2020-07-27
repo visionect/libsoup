@@ -72,31 +72,33 @@ get_request_headers (SoupMessage *msg, GString *header,
 		     SoupEncoding *encoding, gpointer user_data)
 {
 	SoupMessageQueueItem *item = user_data;
-	SoupURI *uri = soup_message_get_uri (msg);
+	GUri *uri = soup_message_get_uri (msg);
 	char *uri_host;
 	char *uri_string;
 	SoupMessageHeadersIter iter;
 	const char *name, *value;
 
-	if (strchr (uri->host, ':'))
-		uri_host = g_strdup_printf ("[%.*s]", (int) strcspn (uri->host, "%"), uri->host);
-	else if (g_hostname_is_non_ascii (uri->host))
-		uri_host = g_hostname_to_ascii (uri->host);
-	else
-		uri_host = uri->host;
+        uri_host = (char*)g_uri_get_host (uri);
+	if (strchr (uri_host, ':'))
+		uri_host = g_strdup_printf ("[%.*s]", (int) strcspn (uri_host, "%"), uri_host);
+	else if (g_hostname_is_non_ascii (uri_host))
+		uri_host = g_hostname_to_ascii (uri_host);
 
 	if (msg->method == SOUP_METHOD_CONNECT) {
 		/* CONNECT URI is hostname:port for tunnel destination */
-		uri_string = g_strdup_printf ("%s:%d", uri_host, uri->port);
+		uri_string = g_strdup_printf ("%s:%d", uri_host, g_uri_get_port (uri));
 	} else {
 		gboolean proxy = soup_connection_is_via_proxy (item->conn);
 
 		/* Proxy expects full URI to destination. Otherwise
 		 * just the path.
 		 */
-		uri_string = soup_uri_to_string (uri, !proxy);
+                if (!proxy)
+                        uri_string = soup_uri_get_path_and_query (uri);
+                else
+                        uri_string = g_uri_to_string (uri);
 
-		if (proxy && uri->fragment) {
+		if (proxy && g_uri_get_fragment (uri)) {
 			/* Strip fragment */
 			char *fragment = strchr (uri_string, '#');
 			if (fragment)
@@ -114,11 +116,11 @@ get_request_headers (SoupMessage *msg, GString *header,
 						uri_host);
 		} else {
 			g_string_append_printf (header, "Host: %s:%d\r\n",
-						uri_host, uri->port);
+						uri_host, g_uri_get_port (uri));
 		}
 	}
 	g_free (uri_string);
-	if (uri_host != uri->host)
+	if (uri_host != g_uri_get_host (uri))
 		g_free (uri_host);
 
 	*encoding = soup_message_headers_get_encoding (msg->request_headers);

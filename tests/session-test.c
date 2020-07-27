@@ -56,7 +56,7 @@ cancel_message_cb (SoupMessage *msg, gpointer session)
 }
 
 static void
-do_test_for_session (SoupSession *session, SoupURI *uri,
+do_test_for_session (SoupSession *session, GUri *uri,
 		     gboolean queue_is_async,
 		     gboolean send_is_blocking,
 		     gboolean cancel_is_immediate)
@@ -64,17 +64,16 @@ do_test_for_session (SoupSession *session, SoupURI *uri,
 	SoupMessage *msg;
 	gboolean finished, local_timeout;
 	guint timeout_id;
-	SoupURI *timeout_uri;
+	GUri *timeout_uri;
 	GBytes *body;
 
 	debug_printf (1, "  queue_message\n");
 	debug_printf (2, "    requesting timeout\n");
-	timeout_uri = soup_uri_new_with_base (uri, "/request-timeout");
+	timeout_uri = g_uri_parse_relative (uri, "/request-timeout", SOUP_HTTP_URI_FLAGS, NULL);
 	msg = soup_message_new_from_uri ("GET", timeout_uri);
-	soup_uri_free (timeout_uri);
 	body = soup_test_session_send (session, msg, NULL, NULL);
 	g_bytes_unref (body);
-	g_object_unref (msg);
+	g_uri_unref (timeout_uri);
 
 	msg = soup_message_new_from_uri ("GET", uri);
 	server_processed_message = timeout = finished = FALSE;
@@ -159,7 +158,7 @@ do_test_for_session (SoupSession *session, SoupURI *uri,
 static void
 do_plain_tests (gconstpointer data)
 {
-	SoupURI *uri = (SoupURI *)data;
+	GUri *uri = (GUri *)data;
 	SoupSession *session;
 
 	session = soup_test_session_new (SOUP_TYPE_SESSION, NULL);
@@ -186,7 +185,7 @@ priority_test_finished_cb (SoupMessage *msg,
 static void
 do_priority_tests (gconstpointer data)
 {
-	SoupURI *uri = (SoupURI *)data;
+	GUri *uri = (GUri *)data;
 	SoupSession *session;
 	int i, finished_count = 0;
 	SoupMessagePriority priorities[] =
@@ -204,14 +203,14 @@ do_priority_tests (gconstpointer data)
 	expected_priorities[2] = SOUP_MESSAGE_PRIORITY_LOW;
 
 	for (i = 0; i < 3; i++) {
-		SoupURI *msg_uri;
+		GUri *msg_uri;
 		SoupMessage *msg;
 		char buf[5];
 
 		g_snprintf (buf, sizeof (buf), "%d", i);
-		msg_uri = soup_uri_new_with_base (uri, buf);
+		msg_uri = g_uri_parse_relative (uri, buf, SOUP_HTTP_URI_FLAGS, NULL);
 		msg = soup_message_new_from_uri ("GET", msg_uri);
-		soup_uri_free (msg_uri);
+		g_uri_unref (msg_uri);
 
 		soup_message_set_priority (msg, priorities[i]);
 		g_signal_connect (msg, "finished",
@@ -374,7 +373,7 @@ int
 main (int argc, char **argv)
 {
 	SoupServer *server;
-	SoupURI *uri;
+	GUri *uri;
 	int ret;
 
 	test_init (argc, argv, NULL);
@@ -390,7 +389,7 @@ main (int argc, char **argv)
 
 	ret = g_test_run ();
 
-	soup_uri_free (uri);
+	g_uri_unref (uri);
 	soup_test_server_quit_unref (server);
 
 	test_cleanup ();

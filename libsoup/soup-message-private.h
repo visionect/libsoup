@@ -23,15 +23,15 @@ typedef struct {
 
 	SoupHTTPVersion    http_version, orig_http_version;
 
-	SoupURI           *uri;
+	GUri              *uri;
 
 	SoupAuth          *auth, *proxy_auth;
 	SoupConnection    *connection;
 
 	GHashTable        *disabled_features;
 
-	SoupURI           *first_party;
-	SoupURI           *site_for_cookies;
+	GUri              *first_party;
+	GUri              *site_for_cookies;
 
 	GTlsCertificate      *tls_certificate;
 	GTlsCertificateFlags  tls_errors;

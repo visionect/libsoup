@@ -398,17 +398,17 @@ soup_auth_ntlm_update_connection (SoupConnectionAuth *auth, SoupMessage *msg,
 
 	g_object_set (G_OBJECT (auth),
 		      SOUP_AUTH_REALM, priv->domain,
-		      SOUP_AUTH_HOST, soup_message_get_uri (msg)->host,
+		      SOUP_AUTH_HOST, g_uri_get_host (soup_message_get_uri (msg)),
 		      NULL);
 	return success;
 }
 
 static GSList *
-soup_auth_ntlm_get_protection_space (SoupAuth *auth, SoupURI *source_uri)
+soup_auth_ntlm_get_protection_space (SoupAuth *auth, GUri *source_uri)
 {
 	char *space, *p;
 
-	space = g_strdup (source_uri->path);
+	space = g_strdup (g_uri_get_path (source_uri));
 
 	/* Strip filename component */
 	p = strrchr (space, '/');

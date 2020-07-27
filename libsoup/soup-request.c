@@ -53,7 +53,7 @@ enum {
 };
 
 typedef struct {
-	SoupURI *uri;
+	GUri *uri;
 	SoupSession *session;
 } SoupRequestPrivate;
 
@@ -75,7 +75,7 @@ soup_request_finalize (GObject *object)
 	SoupRequest *request = SOUP_REQUEST (object);
         SoupRequestPrivate *priv = soup_request_get_instance_private (request);
 
-	g_clear_pointer (&priv->uri, soup_uri_free);
+	g_clear_pointer (&priv->uri, g_uri_unref);
 	g_clear_object (&priv->session);
 
 	G_OBJECT_CLASS (soup_request_parent_class)->finalize (object);
@@ -93,8 +93,8 @@ soup_request_set_property (GObject      *object,
 	switch (prop_id) {
 	case PROP_URI:
 		if (priv->uri)
-			soup_uri_free (priv->uri);
-		priv->uri = g_value_dup_boxed (value);
+			g_uri_unref (priv->uri);
+		priv->uri = soup_normalize_uri (g_value_get_boxed (value));
 		break;
 	case PROP_SESSION:
 		if (priv->session)
@@ -148,10 +148,10 @@ soup_request_initable_init (GInitable     *initable,
 		check_uri (request, priv->uri, error);
 
 	if (!ok && error && !*error) {
-		char *uri_string = soup_uri_to_string (priv->uri, FALSE);
+		char *uri_string = g_uri_to_string_partial (priv->uri, G_URI_HIDE_PASSWORD);
 		g_set_error (error, SOUP_REQUEST_ERROR, SOUP_REQUEST_ERROR_BAD_URI,
 			     _("Invalid “%s” URI: %s"),
-			     priv->uri->scheme,
+			     g_uri_get_scheme (priv->uri),
 			     uri_string);
 		g_free (uri_string);
 	}
@@ -161,7 +161,7 @@ soup_request_initable_init (GInitable     *initable,
 
 static gboolean
 soup_request_default_check_uri (SoupRequest  *request,
-				SoupURI      *uri,
+				GUri         *uri,
 				GError      **error)
 {
 	return TRUE;
@@ -295,7 +295,7 @@ soup_request_class_init (SoupRequestClass *request_class)
 		 g_param_spec_boxed (SOUP_REQUEST_URI,
 				     "URI",
 				     "The request URI",
-				     SOUP_TYPE_URI,
+				     G_TYPE_URI,
 				     G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY |
 				     G_PARAM_STATIC_STRINGS));
 	/**
@@ -338,7 +338,7 @@ soup_request_initable_interface_init (GInitableIface *initable_interface)
  *
  * Since: 2.42
  */
-SoupURI *
+GUri *
 soup_request_get_uri (SoupRequest *request)
 {
         SoupRequestPrivate *priv = soup_request_get_instance_private (request);

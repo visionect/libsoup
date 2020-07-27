@@ -6,7 +6,7 @@
 #include "test-utils.h"
 
 SoupSession *session;
-SoupURI *base_uri;
+GUri *base_uri;
 SoupMessageBody *chunk_data;
 
 static void
@@ -87,7 +87,6 @@ server_callback (SoupServer *server, SoupMessage *msg,
 
 	if (g_str_has_prefix (path, "/type/")) {
 		char **components = g_strsplit (path, "/", 4);
-		char *ptr;
 
 		char *base_name = g_path_get_basename (path);
 
@@ -95,13 +94,12 @@ server_callback (SoupServer *server, SoupMessage *msg,
 		g_assert_no_error (error);
 		g_free (base_name);
 
-		/* Hack to allow passing type in the URI */
-		ptr = g_strrstr (components[2], "_");
-		*ptr = '/';
-
+		/* We had to escape the type strings to pass through a URI */
+                char *type = g_uri_unescape_string (components[2], NULL);
 		soup_message_headers_append (msg->response_headers,
-					     "Content-Type", components[2]);
+					     "Content-Type", type);
 		g_strfreev (components);
+                g_free (type);
 	}
 
 	if (g_str_has_prefix (path, "/multiple_headers/")) {
@@ -195,6 +193,23 @@ got_chunk (SoupMessage *msg, GBytes *chunk, gpointer data)
 	}
 }
 
+static GUri *
+uri_set_query (GUri *uri, const char *query)
+{
+        GUri *new_uri = g_uri_build (
+                g_uri_get_flags (uri),
+                g_uri_get_scheme (uri),
+                NULL,
+                g_uri_get_host (uri),
+                g_uri_get_port (uri),
+                g_uri_get_path (uri),
+                query,
+                g_uri_get_fragment (uri)
+        );
+        g_uri_unref (uri);
+        return new_uri;
+}
+
 static void
 do_signals_test (gboolean should_content_sniff,
 		 gboolean should_pause,
@@ -202,7 +217,7 @@ do_signals_test (gboolean should_content_sniff,
 		 gboolean chunked_encoding,
 		 gboolean empty_response)
 {
-	SoupURI *uri = soup_uri_new_with_base (base_uri, "/mbox");
+	GUri *uri = g_uri_parse_relative (base_uri, "/mbox", SOUP_HTTP_URI_FLAGS, NULL);
 	SoupMessage *msg = soup_message_new_from_uri ("GET", uri);
 	GBytes *expected;
 	GError *error = NULL;
@@ -216,15 +231,15 @@ do_signals_test (gboolean should_content_sniff,
 		      empty_response ? "" : "!");
 
 	if (chunked_encoding)
-		soup_uri_set_query (uri, "chunked=yes");
+                uri = uri_set_query (uri, "chunked=yes");
 
 	if (empty_response) {
-		if (uri->query) {
-			char *tmp = uri->query;
-			uri->query = g_strdup_printf ("%s&empty_response=yes", tmp);
-			g_free (tmp);
+		if (g_uri_get_query (uri)) {
+			char *new_query = g_strdup_printf ("%s&empty_response=yes", g_uri_get_query (uri));
+                        uri = uri_set_query (uri, new_query);
+			g_free (new_query);
 		} else
-			soup_uri_set_query (uri, "empty_response=yes");
+			uri_set_query (uri, "empty_response=yes");
 	}
 
 	soup_message_set_uri (msg, uri);
@@ -261,16 +276,13 @@ do_signals_test (gboolean should_content_sniff,
 	else if (msg->response_body)
 		body = soup_message_body_flatten (msg->response_body);
 
-	if (body) {
-                //g_message ("|||body (%zu): %s", g_bytes_get_size (body), (char*)g_bytes_get_data (body, NULL));
-                //g_message ("|||expected (%zu): %s", g_bytes_get_size (expected), (char*)g_bytes_get_data (expected, NULL));
+	if (body)
                 g_assert_true (g_bytes_equal (body, expected));
-	}
 
 	g_bytes_unref (expected);
 	g_bytes_unref (body);
         g_clear_pointer (&chunk_data, soup_message_body_free);
-	soup_uri_free (uri);
+	g_uri_unref (uri);
 	g_object_unref (msg);
 }
 
@@ -339,7 +351,7 @@ sniffing_content_sniffed (SoupMessage *msg, const char *content_type,
 static void
 test_sniffing (const char *path, const char *expected_type)
 {
-	SoupURI *uri;
+	GUri *uri;
 	SoupMessage *msg;
 	GBytes *body;
 	SoupRequest *req;
@@ -348,7 +360,7 @@ test_sniffing (const char *path, const char *expected_type)
 	const char *req_sniffed_type;
 	GError *error = NULL;
 
-	uri = soup_uri_new_with_base (base_uri, path);
+	uri = g_uri_parse_relative (base_uri, path, SOUP_HTTP_URI_FLAGS, NULL);
 	msg = soup_message_new_from_uri ("GET", uri);
 
 	g_signal_connect (msg, "content-sniffed",
@@ -373,7 +385,7 @@ test_sniffing (const char *path, const char *expected_type)
 	g_assert_cmpstr (req_sniffed_type, ==, expected_type);
 	g_object_unref (req);
 
-	soup_uri_free (uri);
+	g_uri_unref (uri);
 }
 
 static void
@@ -393,7 +405,7 @@ static void
 test_disabled (gconstpointer data)
 {
 	const char *path = data;
-	SoupURI *uri;
+	GUri *uri;
 	SoupMessage *msg;
 	GBytes *body;
 	SoupRequest *req;
@@ -404,7 +416,7 @@ test_disabled (gconstpointer data)
 
 	g_test_bug ("574773");
 
-	uri = soup_uri_new_with_base (base_uri, path);
+	uri = g_uri_parse_relative (base_uri, path, SOUP_HTTP_URI_FLAGS, NULL);
 
 	msg = soup_message_new_from_uri ("GET", uri);
 	g_assert_false (soup_message_is_feature_disabled (msg, SOUP_TYPE_CONTENT_SNIFFER));
@@ -438,7 +450,7 @@ test_disabled (gconstpointer data)
 
 	g_object_unref (req);
 
-	soup_uri_free (uri);
+	g_uri_unref (uri);
 }
 
 int
@@ -543,55 +555,55 @@ main (int argc, char **argv)
 
 	/* Test the XML sniffing path */
 	g_test_add_data_func ("/sniffing/type/xml",
-			      "type/text_xml/home.gif => text/xml",
+			      "type/text%2Fxml/home.gif => text/xml",
 			      do_sniffing_test);
 	g_test_add_data_func ("/sniffing/type/xml+xml",
-			      "type/anice_type+xml/home.gif => anice/type+xml",
+			      "type/anice%2Ftype+xml/home.gif => anice/type+xml",
 			      do_sniffing_test);
 	g_test_add_data_func ("/sniffing/type/application-xml",
-			      "type/application_xml/home.gif => application/xml",
+			      "type/application%2Fxml/home.gif => application/xml",
 			      do_sniffing_test);
 
 	/* Test the feed or html path */
 	g_test_add_data_func ("/sniffing/type/html/html",
-			      "type/text_html/test.html => text/html",
+			      "type/text%2Fhtml/test.html => text/html",
 			      do_sniffing_test);
 	g_test_add_data_func ("/sniffing/type/html/rss",
-			      "type/text_html/rss20.xml => application/rss+xml",
+			      "type/text%2Fhtml/rss20.xml => application/rss+xml",
 			      do_sniffing_test);
 	g_test_add_data_func ("/sniffing/type/html/atom",
-			      "type/text_html/atom.xml => application/atom+xml",
+			      "type/text%2Fhtml/atom.xml => application/atom+xml",
 			      do_sniffing_test);
 	g_test_add_data_func ("/sniffing/type/html/rdf",
-			      "type/text_html/feed.rdf => application/rss+xml",
+			      "type/text%2Fhtml/feed.rdf => application/rss+xml",
 			      do_sniffing_test);
 
 	/* Test the image sniffing path */
 	g_test_add_data_func ("/sniffing/type/image/gif",
-			      "type/image_png/home.gif => image/gif",
+			      "type/image%2Fpng/home.gif => image/gif",
 			      do_sniffing_test);
 	g_test_add_data_func ("/sniffing/type/image/png",
-			      "type/image_gif/home.png => image/png",
+			      "type/image%2Fgif/home.png => image/png",
 			      do_sniffing_test);
 	g_test_add_data_func ("/sniffing/type/image/jpeg",
-			      "type/image_png/home.jpg => image/jpeg",
+			      "type/image%2Fpng/home.jpg => image/jpeg",
 			      do_sniffing_test);
 	g_test_add_data_func ("/sniffing/type/image/webp",
-			      "type/image_png/tux.webp => image/webp",
+			      "type/image%2Fpng/tux.webp => image/webp",
 			      do_sniffing_test);
 
 	/* Test audio and video sniffing path */
 	g_test_add_data_func ("/sniffing/type/audio/wav",
-			      "type/audio_mpeg/test.wav => audio/wave",
+			      "type/audio%2Fmpeg/test.wav => audio/wave",
 			      do_sniffing_test);
 	g_test_add_data_func ("/sniffing/type/audio/aiff",
-			      "type/audio_mpeg/test.aiff => audio/aiff",
+			      "type/audio%2Fmpeg/test.aiff => audio/aiff",
 			      do_sniffing_test);
 	g_test_add_data_func ("/sniffing/type/audio/ogg",
-			      "type/audio_mpeg/test.ogg => application/ogg",
+			      "type/audio%2Fmpeg/test.ogg => application/ogg",
 			      do_sniffing_test);
 	g_test_add_data_func ("/sniffing/type/video/webm",
-			      "type/video_theora/test.webm => video/webm",
+			      "type/video%2Ftheora/test.webm => video/webm",
 			      do_sniffing_test);
 
 	/* Test the MP4 sniffing path */
@@ -606,7 +618,7 @@ main (int argc, char **argv)
 
 	/* Test that we keep the parameters when sniffing */
 	g_test_add_data_func ("/sniffing/parameters",
-			      "type/text_html; charset=UTF-8/test.html => text/html; charset=UTF-8",
+			      "type/text%2Fhtml%3B%20charset=UTF-8/test.html => text/html; charset=UTF-8",
 			      do_sniffing_test);
 
 	/* Test that disabling the sniffer works correctly */
@@ -616,7 +628,7 @@ main (int argc, char **argv)
 
 	ret = g_test_run ();
 
-	soup_uri_free (base_uri);
+	g_uri_unref (base_uri);
 
 	soup_test_session_abort_unref (session);
 	soup_test_server_quit_unref (server);

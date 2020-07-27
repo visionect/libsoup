@@ -40,7 +40,7 @@ GSocket   *soup_socket_steal_gsocket           (SoupSocket           *sock);
 GIOStream *soup_socket_get_connection          (SoupSocket           *sock);
 GIOStream *soup_socket_get_iostream            (SoupSocket           *sock);
 
-SoupURI   *soup_socket_get_http_proxy_uri      (SoupSocket           *sock);
+GUri      *soup_socket_get_http_proxy_uri      (SoupSocket           *sock);
 
 gboolean   soup_socket_listen_full             (SoupSocket           *sock,
                                                 GError              **error);

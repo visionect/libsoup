@@ -241,7 +241,7 @@ soup_directory_input_stream_setup_buffer (SoupDirectoryInputStream *stream)
 
 GInputStream *
 soup_directory_input_stream_new (GFileEnumerator *enumerator,
-				 SoupURI         *uri)
+				 GUri            *uri)
 {
 	GInputStream *stream;
 
@@ -251,7 +251,7 @@ soup_directory_input_stream_new (GFileEnumerator *enumerator,
 	stream = g_object_new (SOUP_TYPE_DIRECTORY_INPUT_STREAM, NULL);
 
 	SOUP_DIRECTORY_INPUT_STREAM (stream)->enumerator = g_object_ref (enumerator);
-	SOUP_DIRECTORY_INPUT_STREAM (stream)->uri = soup_uri_to_string (uri, FALSE);
+	SOUP_DIRECTORY_INPUT_STREAM (stream)->uri = g_uri_to_string (uri);
 
 	soup_directory_input_stream_setup_buffer (SOUP_DIRECTORY_INPUT_STREAM (stream));
 

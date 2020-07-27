@@ -37,7 +37,7 @@ struct _SoupRequestClass {
 	const char **schemes;
 
 	gboolean       (*check_uri)          (SoupRequest          *req_base,
-					      SoupURI              *uri,
+					      GUri                 *uri,
 					      GError              **error);
 
 	GInputStream * (*send)               (SoupRequest          *request,
@@ -73,7 +73,7 @@ GInputStream *soup_request_send_finish        (SoupRequest          *request,
 					       GError              **error);
 
 SOUP_AVAILABLE_IN_2_34
-SoupURI      *soup_request_get_uri            (SoupRequest          *request);
+GUri         *soup_request_get_uri            (SoupRequest          *request);
 SOUP_AVAILABLE_IN_2_34
 SoupSession  *soup_request_get_session        (SoupRequest          *request);
 

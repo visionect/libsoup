@@ -19,7 +19,7 @@ typedef struct {
 	SoupSocket  *socket;
 	SoupSocketProperties *socket_props;
 
-	SoupURI *remote_uri, *proxy_uri;
+	GUri *remote_uri, *proxy_uri;
 	gboolean ssl;
 
 	SoupMessage *current_msg;
@@ -67,8 +67,8 @@ soup_connection_finalize (GObject *object)
 {
 	SoupConnectionPrivate *priv = soup_connection_get_instance_private (SOUP_CONNECTION (object));
 
-	g_clear_pointer (&priv->remote_uri, soup_uri_free);
-	g_clear_pointer (&priv->proxy_uri, soup_uri_free);
+	g_clear_pointer (&priv->remote_uri, g_uri_unref);
+	g_clear_pointer (&priv->proxy_uri, g_uri_unref);
 	g_clear_pointer (&priv->socket_props, soup_socket_properties_unref);
 	g_clear_object (&priv->current_msg);
 
@@ -178,7 +178,7 @@ soup_connection_class_init (SoupConnectionClass *connection_class)
 		g_param_spec_boxed (SOUP_CONNECTION_REMOTE_URI,
 				    "Remote URI",
 				    "The URI of the HTTP server",
-				    SOUP_TYPE_URI,
+				    G_TYPE_URI,
 				    G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY |
 				    G_PARAM_STATIC_STRINGS));
 	g_object_class_install_property (
@@ -263,7 +263,7 @@ current_msg_got_body (SoupMessage *msg, gpointer user_data)
 		soup_connection_event (conn, G_SOCKET_CLIENT_PROXY_NEGOTIATED, NULL);
 
 		/* We're now effectively no longer proxying */
-		g_clear_pointer (&priv->proxy_uri, soup_uri_free);
+		g_clear_pointer (&priv->proxy_uri, g_uri_unref);
 	}
 
 	priv->reusable = soup_message_is_keepalive (msg);
@@ -402,9 +402,9 @@ soup_connection_connect_async (SoupConnection      *conn,
 	/* Set the protocol to ensure correct proxy resolution. */
 	remote_addr =
 		g_object_new (G_TYPE_NETWORK_ADDRESS,
-			      "hostname", priv->remote_uri->host,
-			      "port", priv->remote_uri->port,
-			      "scheme", priv->remote_uri->scheme,
+			      "hostname", g_uri_get_host (priv->remote_uri),
+			      "port", soup_uri_get_port_with_default (priv->remote_uri),
+			      "scheme", g_uri_get_scheme (priv->remote_uri),
 			      NULL);
 
 	priv->socket =
@@ -447,9 +447,9 @@ soup_connection_connect_sync (SoupConnection  *conn,
 	/* Set the protocol to ensure correct proxy resolution. */
 	remote_addr =
 		g_object_new (G_TYPE_NETWORK_ADDRESS,
-			      "hostname", priv->remote_uri->host,
-			      "port", priv->remote_uri->port,
-			      "scheme", priv->remote_uri->scheme,
+			      "hostname", g_uri_get_host (priv->remote_uri),
+			      "port", soup_uri_get_port_with_default (priv->remote_uri),
+			      "scheme", g_uri_get_scheme (priv->remote_uri),
 			      NULL);
 
 	priv->socket =
@@ -599,7 +599,7 @@ soup_connection_get_socket (SoupConnection *conn)
 	return priv->socket;
 }
 
-SoupURI *
+GUri *
 soup_connection_get_remote_uri (SoupConnection *conn)
 {
 	SoupConnectionPrivate *priv = soup_connection_get_instance_private (conn);
@@ -609,7 +609,7 @@ soup_connection_get_remote_uri (SoupConnection *conn)
 	return priv->remote_uri;
 }
 
-SoupURI *
+GUri *
 soup_connection_get_proxy_uri (SoupConnection *conn)
 {
 	SoupConnectionPrivate *priv = soup_connection_get_instance_private (conn);

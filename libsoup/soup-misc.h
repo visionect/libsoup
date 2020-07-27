@@ -53,8 +53,6 @@ extern const char soup_char_attributes[];
 char *soup_uri_decoded_copy (const char *str, int length, int *decoded_length);
 char *soup_uri_to_string_internal (SoupURI *uri, gboolean just_path_and_query,
 				   gboolean include_password, gboolean force_port);
-gboolean soup_uri_is_http (SoupURI *uri, char **aliases);
-gboolean soup_uri_is_https (SoupURI *uri, char **aliases);
 
 /* At some point it might be possible to mark additional methods
  * safe or idempotent...

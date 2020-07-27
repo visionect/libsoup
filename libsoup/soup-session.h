@@ -115,7 +115,7 @@ SoupRequest     *soup_session_request          (SoupSession  *session,
 						GError      **error);
 SOUP_AVAILABLE_IN_2_42
 SoupRequest     *soup_session_request_uri      (SoupSession  *session,
-						SoupURI      *uri,
+						GUri         *uri,
 						GError      **error);
 SOUP_AVAILABLE_IN_2_42
 SoupRequestHTTP *soup_session_request_http     (SoupSession  *session,
@@ -125,7 +125,7 @@ SoupRequestHTTP *soup_session_request_http     (SoupSession  *session,
 SOUP_AVAILABLE_IN_2_42
 SoupRequestHTTP *soup_session_request_http_uri (SoupSession  *session,
 						const char   *method,
-						SoupURI      *uri,
+						GUri         *uri,
 						GError      **error);
 
 SOUP_AVAILABLE_IN_2_42

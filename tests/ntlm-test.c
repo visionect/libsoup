@@ -43,7 +43,7 @@ static const char *state_name[] = {
 typedef struct {
 	SoupServer *server;
 	GHashTable *connections;
-	SoupURI *uri;
+	GUri *uri;
 	gboolean ntlmssp;
 	gboolean ntlmv2;
 } TestServer;
@@ -194,7 +194,7 @@ static void
 teardown_server (TestServer *ts,
 		 gconstpointer test_data)
 {
-	soup_uri_free (ts->uri);
+	g_uri_unref (ts->uri);
 	soup_test_server_quit_unref (ts->server);
 	g_hash_table_destroy (ts->connections);
 }
@@ -305,19 +305,19 @@ response_check (SoupMessage *msg, gpointer user_data)
 }
 
 static void
-do_message (SoupSession *session, SoupURI *base_uri, const char *path,
+do_message (SoupSession *session, GUri *base_uri, const char *path,
 	    gboolean get_ntlm_prompt, gboolean do_ntlm,
 	    gboolean get_basic_prompt, gboolean do_basic,
 	    guint status_code)
 {
-	SoupURI *uri;
+	GUri *uri;
 	SoupMessage *msg;
 	GBytes *body;
 	NTLMState state = { FALSE, FALSE, FALSE, FALSE };
 
-	uri = soup_uri_new_with_base (base_uri, path);
+	uri = g_uri_parse_relative (base_uri, path, SOUP_HTTP_URI_FLAGS, NULL);
 	msg = soup_message_new_from_uri ("GET", uri);
-	soup_uri_free (uri);
+	g_uri_unref (uri);
 
 	g_signal_connect (msg, "got_headers",
 			  G_CALLBACK (prompt_check), &state);
@@ -391,7 +391,7 @@ do_message (SoupSession *session, SoupURI *base_uri, const char *path,
 }
 
 static void
-do_ntlm_round (SoupURI *base_uri, gboolean use_ntlm,
+do_ntlm_round (GUri *base_uri, gboolean use_ntlm,
 	       const char *user, gboolean use_builtin_ntlm)
 {
 	SoupSession *session;
@@ -636,7 +636,7 @@ do_retrying_test (TestServer *ts,
 {
 	SoupSession *session;
 	SoupMessage *msg;
-	SoupURI *uri;
+	GUri *uri;
 	GBytes *body;
 	gboolean retried = FALSE;
 
@@ -652,9 +652,9 @@ do_retrying_test (TestServer *ts,
 	g_signal_connect (session, "authenticate",
 			  G_CALLBACK (retry_test_authenticate), &retried);
 
-	uri = soup_uri_new_with_base (ts->uri, "/alice");
+	uri = g_uri_parse_relative (ts->uri, "/alice", SOUP_HTTP_URI_FLAGS, NULL);
 	msg = soup_message_new_from_uri ("GET", uri);
-	soup_uri_free (uri);
+	g_uri_unref (uri);
 
 	body = soup_test_session_send (session, msg, NULL, NULL);
 
@@ -675,9 +675,9 @@ do_retrying_test (TestServer *ts,
 			  G_CALLBACK (retry_test_authenticate), &retried);
 	retried = FALSE;
 
-	uri = soup_uri_new_with_base (ts->uri, "/bob");
+	uri = g_uri_parse_relative (ts->uri, "/bob", SOUP_HTTP_URI_FLAGS, NULL);
 	msg = soup_message_new_from_uri ("GET", uri);
-	soup_uri_free (uri);
+	g_uri_unref (uri);
 
 	body = soup_test_session_send (session, msg, NULL, NULL);
 

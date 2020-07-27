@@ -19,24 +19,29 @@
 #include "soup-misc.h"
 #include "soup-socket-private.h"
 
-static SoupURI *
+static GUri *
 parse_connect_authority (const char *req_path)
 {
-	SoupURI *uri;
+	GUri *uri;
 	char *fake_uri;
 
 	fake_uri = g_strdup_printf ("http://%s", req_path);
-	uri = soup_uri_new (fake_uri);
+	uri = soup_uri_parse_normalized (NULL, fake_uri, NULL);
 	g_free (fake_uri);
 
-	if (uri->user || uri->password ||
-	    uri->query || uri->fragment ||
-	    !uri->host ||
-	    (uri->port == 0) ||
-	    (strcmp (uri->path, "/") != 0)) {
-		soup_uri_free (uri);
-		return NULL;
-	}
+        if (!uri)
+                return NULL;
+
+        if (g_uri_get_user (uri) ||
+            g_uri_get_password (uri) ||
+            g_uri_get_query (uri) ||
+            g_uri_get_fragment (uri) ||
+            !g_uri_get_host (uri) ||
+            g_uri_get_port (uri) <= 0 ||
+            strcmp (g_uri_get_path (uri), "/") != 0) {
+                g_uri_unref (uri);
+                return NULL;
+        }
 
 	return uri;
 }
@@ -45,11 +50,12 @@ static guint
 parse_request_headers (SoupMessage *msg, char *headers, guint headers_len,
 		       SoupEncoding *encoding, gpointer sock, GError **error)
 {
-	char *req_method, *req_path, *url;
+	char *req_method, *req_path;
 	SoupHTTPVersion version;
 	const char *req_host;
 	guint status;
-	SoupURI *uri;
+        char *url;
+	GUri *uri;
 
 	status = soup_headers_parse_request (headers, headers_len,
 					     msg->request_headers,
@@ -89,52 +95,51 @@ parse_request_headers (SoupMessage *msg, char *headers, guint headers_len,
 
 	if (!strcmp (req_path, "*") && req_host) {
 		/* Eg, "OPTIONS * HTTP/1.1" */
-		url = g_strdup_printf ("%s://%s",
+		url = g_strdup_printf ("%s://%s/*",
 				       soup_socket_is_ssl (sock) ? "https" : "http",
 				       req_host);
-		uri = soup_uri_new (url);
-		if (uri)
-			soup_uri_set_path (uri, "*");
+		uri = g_uri_parse (url, SOUP_HTTP_URI_FLAGS, NULL);
 		g_free (url);
 	} else if (msg->method == SOUP_METHOD_CONNECT) {
 		/* Authority */
 		uri = parse_connect_authority (req_path);
 	} else if (*req_path != '/') {
 		/* Absolute URI */
-		uri = soup_uri_new (req_path);
+		uri = g_uri_parse (req_path, SOUP_HTTP_URI_FLAGS, NULL);
 	} else if (req_host) {
 		url = g_strdup_printf ("%s://%s%s",
 				       soup_socket_is_ssl (sock) ? "https" : "http",
 				       req_host, req_path);
-		uri = soup_uri_new (url);
+		uri = g_uri_parse (url, SOUP_HTTP_URI_FLAGS, NULL);
 		g_free (url);
 	} else if (soup_message_get_http_version (msg) == SOUP_HTTP_1_0) {
 		/* No Host header, no AbsoluteUri */
 		GInetSocketAddress *addr = soup_socket_get_local_address (sock);
                 GInetAddress *inet_addr = g_inet_socket_address_get_address (addr);
                 char *local_ip = g_inet_address_to_string (inet_addr);
+                int port = g_inet_socket_address_get_port (addr);
+                if (port == 0)
+                        port = -1;
 
-		uri = soup_uri_new (NULL);
-		soup_uri_set_scheme (uri, soup_socket_is_ssl (sock) ?
-				     SOUP_URI_SCHEME_HTTPS :
-				     SOUP_URI_SCHEME_HTTP);
-		soup_uri_set_host (uri, local_ip);
-		soup_uri_set_port (uri, g_inet_socket_address_get_port (addr));
-		soup_uri_set_path (uri, req_path);
+                uri = g_uri_build (SOUP_HTTP_URI_FLAGS, 
+                                   soup_socket_is_ssl (sock) ? "https" : "http",
+                                   NULL, local_ip, port, req_path, NULL, NULL);
 		g_free (local_ip);
 	} else
 		uri = NULL;
 
 	g_free (req_path);
 
-	if (!uri || !uri->host) {
+	if (!uri || !g_uri_get_host (uri)) {
 		if (uri)
-			soup_uri_free (uri);
+			g_uri_unref (uri);
 		return SOUP_STATUS_BAD_REQUEST;
 	}
 
-	soup_message_set_uri (msg, uri);
-	soup_uri_free (uri);
+        GUri *normalized_uri = soup_normalize_uri (uri);
+	soup_message_set_uri (msg, normalized_uri);
+	g_uri_unref (uri);
+        g_uri_unref (normalized_uri);
 
 	return SOUP_STATUS_OK;
 }

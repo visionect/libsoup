@@ -60,8 +60,8 @@ gboolean        soup_connection_start_ssl_finish (SoupConnection       *conn,
 void            soup_connection_disconnect     (SoupConnection   *conn);
 
 SoupSocket     *soup_connection_get_socket     (SoupConnection   *conn);
-SoupURI        *soup_connection_get_remote_uri (SoupConnection   *conn);
-SoupURI        *soup_connection_get_proxy_uri  (SoupConnection   *conn);
+GUri           *soup_connection_get_remote_uri (SoupConnection   *conn);
+GUri           *soup_connection_get_proxy_uri  (SoupConnection   *conn);
 gboolean        soup_connection_is_via_proxy   (SoupConnection   *conn);
 gboolean        soup_connection_is_tunnelled   (SoupConnection   *conn);
 

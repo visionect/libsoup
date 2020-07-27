@@ -1083,8 +1083,8 @@ io_run_until (SoupMessage *msg, gboolean blocking,
 	/* Allow profiling of network requests. */
 	if (io->read_state == SOUP_MESSAGE_IO_STATE_DONE &&
 	    io->write_state == SOUP_MESSAGE_IO_STATE_DONE) {
-		SoupURI *uri = soup_message_get_uri (msg);
-		char *uri_str = soup_uri_to_string (uri, FALSE);
+		GUri *uri = soup_message_get_uri (msg);
+		char *uri_str = g_uri_to_string_partial (uri, G_URI_HIDE_PASSWORD);
 		const gchar *last_modified = soup_message_headers_get_one (msg->request_headers, "Last-Modified");
 		const gchar *etag = soup_message_headers_get_one (msg->request_headers, "ETag");
 

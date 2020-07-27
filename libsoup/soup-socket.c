@@ -1612,13 +1612,13 @@ soup_socket_get_remote_address (SoupSocket *sock)
         return priv->remote_addr;
 }
 
-SoupURI *
+GUri *
 soup_socket_get_http_proxy_uri (SoupSocket *sock)
 {
 	SoupSocketPrivate *priv = soup_socket_get_instance_private (sock);
 	GSocketAddress *addr;
 	GProxyAddress *paddr;
-	SoupURI *uri;
+	GUri *uri;
 
 	if (!priv->gsock)
 		return NULL;
@@ -1630,10 +1630,10 @@ soup_socket_get_http_proxy_uri (SoupSocket *sock)
 	}
 
 	paddr = G_PROXY_ADDRESS (addr);
-	if (strcmp (g_proxy_address_get_protocol (paddr), "http") != 0)
+	if (g_ascii_strcasecmp (g_proxy_address_get_protocol (paddr), "http") != 0)
 		return NULL;
 
-	uri = soup_uri_new (g_proxy_address_get_uri (paddr));
+	uri = soup_uri_parse_normalized (NULL, g_proxy_address_get_uri (paddr), NULL);
 	g_object_unref (addr);
 	return uri;
 }

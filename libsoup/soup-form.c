@@ -355,22 +355,38 @@ soup_form_encode_valist (const char *first_field, va_list args)
 	return g_string_free (str, FALSE);
 }
 
+static GUri *
+copy_uri_with_new_query (GUri *uri, const char *query)
+{
+        return g_uri_build_with_user (
+                g_uri_get_flags (uri),
+                g_uri_get_scheme (uri),
+                g_uri_get_user (uri),
+                g_uri_get_password (uri),
+                g_uri_get_auth_params (uri),
+                g_uri_get_host (uri),
+                g_uri_get_port (uri),
+                g_uri_get_path (uri),
+                query,
+                g_uri_get_fragment (uri)
+        );
+}
+
 static SoupMessage *
 soup_form_request_for_data (const char *method, const char *uri_string,
 			    char *form_data)
 {
 	SoupMessage *msg;
-	SoupURI *uri;
+	GUri *uri;
 
-	uri = soup_uri_new (uri_string);
+	uri = soup_uri_parse_normalized (NULL, uri_string, NULL);
 	if (!uri)
 		return NULL;
 
 	if (!strcmp (method, "GET")) {
-		g_free (uri->query);
-		uri->query = form_data;
-
-		msg = soup_message_new_from_uri (method, uri);
+                GUri *new_uri = copy_uri_with_new_query (uri, form_data);
+		msg = soup_message_new_from_uri (method, new_uri);
+                g_uri_unref (new_uri);
 	} else if (!strcmp (method, "POST") || !strcmp (method, "PUT")) {
 		GBytes *body;
 
@@ -386,7 +402,7 @@ soup_form_request_for_data (const char *method, const char *uri_string,
 		/* Don't crash */
 		msg = soup_message_new_from_uri (method, uri);
 	}
-	soup_uri_free (uri);
+	g_uri_unref (uri);
 
 	return msg;
 }

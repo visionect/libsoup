@@ -210,7 +210,7 @@ get_cacheability (SoupCache *cache, SoupMessage *msg)
 	}
 
 	/* Section 13.9 */
-	if ((soup_message_get_uri (msg))->query &&
+	if ((g_uri_get_query (soup_message_get_uri (msg))) &&
 	    !soup_message_headers_get_one (msg->response_headers, "Expires") &&
 	    !has_max_age)
 		return SOUP_CACHE_UNCACHEABLE;
@@ -465,7 +465,7 @@ soup_cache_entry_new (SoupCache *cache, SoupMessage *msg, time_t request_time, t
 	entry->being_validated = FALSE;
 	entry->status_code = msg->status_code;
 	entry->response_time = response_time;
-	entry->uri = soup_uri_to_string (soup_message_get_uri (msg), FALSE);
+	entry->uri = g_uri_to_string_partial (soup_message_get_uri (msg), G_URI_HIDE_PASSWORD);
 
 	/* Headers */
 	entry->headers = soup_message_headers_new (SOUP_MESSAGE_HEADERS_RESPONSE);
@@ -662,7 +662,7 @@ soup_cache_entry_lookup (SoupCache *cache,
 	guint32 key;
 	char *uri = NULL;
 
-	uri = soup_uri_to_string (soup_message_get_uri (msg), FALSE);
+	uri = g_uri_to_string_partial (soup_message_get_uri (msg), G_URI_HIDE_PASSWORD);
 	key = get_cache_key_from_uri ((const char *) uri);
 
 	entry = g_hash_table_lookup (priv->cache, GUINT_TO_POINTER (key));
@@ -1364,7 +1364,7 @@ SoupMessage *
 soup_cache_generate_conditional_request (SoupCache *cache, SoupMessage *original)
 {
 	SoupMessage *msg;
-	SoupURI *uri;
+	GUri *uri;
 	SoupCacheEntry *entry;
 	const char *last_modified, *etag;
 	GList *disabled_features, *f;

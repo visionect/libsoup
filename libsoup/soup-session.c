@@ -68,7 +68,7 @@
  **/
 
 typedef struct {
-	SoupURI         *uri;
+	GUri            *uri;
 	GNetworkAddress *addr;
 
 	GSList      *connections;      /* CONTAINS: SoupConnection */
@@ -100,7 +100,7 @@ typedef struct {
 	GResolver *resolver;
 	GProxyResolver *proxy_resolver;
 	gboolean proxy_use_default;
-	SoupURI *proxy_uri;
+	GUri *proxy_uri;
 
 	SoupSocketProperties *socket_props;
 
@@ -310,7 +310,7 @@ soup_session_finalize (GObject *object)
 
 	g_object_unref (priv->resolver);
 	g_clear_object (&priv->proxy_resolver);
-	g_clear_pointer (&priv->proxy_uri, soup_uri_free);
+	g_clear_pointer (&priv->proxy_uri, g_uri_unref);
 
 	g_free (priv->http_aliases);
 	g_free (priv->https_aliases);
@@ -425,19 +425,19 @@ set_aliases (char ***variable, char **value)
 }
 
 static void
-set_proxy_resolver (SoupSession *session, SoupURI *uri,
+set_proxy_resolver (SoupSession *session, GUri *uri,
 		    GProxyResolver *g_resolver)
 {
 	SoupSessionPrivate *priv = soup_session_get_instance_private (session);
 	g_clear_object (&priv->proxy_resolver);
-	g_clear_pointer (&priv->proxy_uri, soup_uri_free);
+	g_clear_pointer (&priv->proxy_uri, g_uri_unref);
 	priv->proxy_use_default = FALSE;
 
 	if (uri) {
 		char *uri_string;
 
-		priv->proxy_uri = soup_uri_copy (uri);
-		uri_string = soup_uri_to_string_internal (uri, FALSE, TRUE, TRUE);
+		priv->proxy_uri = g_uri_ref (uri);
+		uri_string = g_uri_to_string (uri);
 		priv->proxy_resolver = g_simple_proxy_resolver_new (uri_string, NULL);
 		g_free (uri_string);
 	} else if (g_resolver)
@@ -675,50 +675,71 @@ soup_session_new_with_options (const char *optname1,
 static guint
 soup_host_uri_hash (gconstpointer key)
 {
-	const SoupURI *uri = key;
+	GUri *uri = (GUri*)key;
 
-	g_return_val_if_fail (uri != NULL && uri->host != NULL, 0);
+	g_return_val_if_fail (uri != NULL && g_uri_get_host (uri) != NULL, 0);
 
-	return uri->port + soup_str_case_hash (uri->host);
+	return g_uri_get_port (uri) + soup_str_case_hash (g_uri_get_host (uri));
 }
 
 static gboolean
 soup_host_uri_equal (gconstpointer v1, gconstpointer v2)
 {
-	const SoupURI *one = v1;
-	const SoupURI *two = v2;
+	GUri *one = (GUri*)v1;
+	GUri *two = (GUri*)v2;
 
 	g_return_val_if_fail (one != NULL && two != NULL, one == two);
-	g_return_val_if_fail (one->host != NULL && two->host != NULL, one->host == two->host);
 
-	if (one->port != two->port)
+        const char *one_host = g_uri_get_host (one);
+        const char *two_host = g_uri_get_host (two);
+	g_return_val_if_fail (one_host != NULL && two_host != NULL, one_host == two_host);
+
+	if (g_uri_get_port (one) != g_uri_get_port (two))
 		return FALSE;
 
-	return g_ascii_strcasecmp (one->host, two->host) == 0;
+	return g_ascii_strcasecmp (one_host, two_host) == 0;
+}
+
+static GUri *
+copy_uri_with_new_scheme (GUri *uri, const char *scheme)
+{
+        return g_uri_build_with_user (
+                g_uri_get_flags (uri),
+                scheme,
+                g_uri_get_user (uri),
+                g_uri_get_password (uri),
+                g_uri_get_auth_params (uri),
+                g_uri_get_host (uri),
+                g_uri_get_port (uri),
+                g_uri_get_path (uri),
+                g_uri_get_query (uri),
+                g_uri_get_fragment (uri)
+        );
 }
 
 
 static SoupSessionHost *
-soup_session_host_new (SoupSession *session, SoupURI *uri)
+soup_session_host_new (SoupSession *session, GUri *uri)
 {
 	SoupSessionHost *host;
+        const char *scheme = g_uri_get_scheme (uri);
 
 	host = g_slice_new0 (SoupSessionHost);
-	host->uri = soup_uri_copy_host (uri);
-	if (host->uri->scheme != SOUP_URI_SCHEME_HTTP &&
-	    host->uri->scheme != SOUP_URI_SCHEME_HTTPS) {
+	if (g_ascii_strcasecmp (scheme, "http") &&
+	    g_ascii_strcasecmp (scheme, "https")) {
 		SoupSessionPrivate *priv = soup_session_get_instance_private (session);
 
-		if (soup_uri_is_https (host->uri, priv->https_aliases))
-			host->uri->scheme = SOUP_URI_SCHEME_HTTPS;
+		if (soup_uri_is_https (uri, priv->https_aliases))
+                        host->uri = copy_uri_with_new_scheme (uri, "https");
 		else
-			host->uri->scheme = SOUP_URI_SCHEME_HTTP;
-	}
+			host->uri = copy_uri_with_new_scheme (uri, "http");
+	} else
+                host->uri = g_uri_ref (uri);
 
 	host->addr = g_object_new (G_TYPE_NETWORK_ADDRESS,
-				   "hostname", host->uri->host,
-				   "port", host->uri->port,
-				   "scheme", host->uri->scheme,
+				   "hostname", g_uri_get_host (host->uri),
+				   "port", soup_uri_get_port_with_default (host->uri),
+				   "scheme", g_uri_get_scheme (host->uri),
 				   NULL);
 	host->keep_alive_src = NULL;
 	host->session = session;
@@ -728,12 +749,12 @@ soup_session_host_new (SoupSession *session, SoupURI *uri)
 
 /* Requires conn_lock to be locked */
 static SoupSessionHost *
-get_host_for_uri (SoupSession *session, SoupURI *uri)
+get_host_for_uri (SoupSession *session, GUri *uri)
 {
 	SoupSessionPrivate *priv = soup_session_get_instance_private (session);
 	SoupSessionHost *host;
 	gboolean https;
-	SoupURI *uri_tmp = NULL;
+	GUri *uri_tmp = NULL;
 
 	https = soup_uri_is_https (uri, priv->https_aliases);
 	if (https)
@@ -743,14 +764,12 @@ get_host_for_uri (SoupSession *session, SoupURI *uri)
 	if (host)
 		return host;
 
-	if (uri->scheme != SOUP_URI_SCHEME_HTTP &&
-	    uri->scheme != SOUP_URI_SCHEME_HTTPS) {
-		uri = uri_tmp = soup_uri_copy (uri);
-		uri->scheme = https ? SOUP_URI_SCHEME_HTTPS : SOUP_URI_SCHEME_HTTP;
+	if (!soup_uri_is_http (uri, NULL) && !soup_uri_is_https (uri, NULL)) {
+		uri = uri_tmp = copy_uri_with_new_scheme (uri, https ? "https" : "http");
 	}
 	host = soup_session_host_new (session, uri);
 	if (uri_tmp)
-		soup_uri_free (uri_tmp);
+		g_uri_unref (uri_tmp);
 
 	if (https)
 		g_hash_table_insert (priv->https_hosts, host->uri, host);
@@ -777,7 +796,7 @@ free_host (SoupSessionHost *host)
 		g_source_unref (host->keep_alive_src);
 	}
 
-	soup_uri_free (host->uri);
+	g_uri_unref (host->uri);
 	g_object_unref (host->addr);
 	g_slice_free (SoupSessionHost, host);
 }
@@ -804,20 +823,23 @@ auth_manager_authenticate (SoupAuthManager *manager, SoupMessage *msg,
 	  (msg)->status_code == SOUP_STATUS_FOUND) && \
 	 SOUP_METHOD_IS_SAFE ((msg)->method))
 
-static inline SoupURI *
+static inline GUri *
 redirection_uri (SoupMessage *msg)
 {
 	const char *new_loc;
-	SoupURI *new_uri;
+	GUri *new_uri;
 
 	new_loc = soup_message_headers_get_one (msg->response_headers,
 						"Location");
 	if (!new_loc)
 		return NULL;
-	new_uri = soup_uri_new_with_base (soup_message_get_uri (msg), new_loc);
-	if (!new_uri || !new_uri->host) {
-		if (new_uri)
-			soup_uri_free (new_uri);
+
+        new_uri = soup_uri_parse_normalized (soup_message_get_uri (msg), new_loc, NULL);
+	if (!new_uri)
+                return NULL;
+        
+        if (!g_uri_get_host (new_uri)) {
+		g_uri_unref (new_uri);
 		return NULL;
 	}
 
@@ -841,7 +863,7 @@ gboolean
 soup_session_would_redirect (SoupSession *session, SoupMessage *msg)
 {
 	SoupSessionPrivate *priv = soup_session_get_instance_private (session);
-	SoupURI *new_uri;
+	GUri *new_uri;
 
 	/* It must have an appropriate status code and method */
 	if (!SOUP_SESSION_WOULD_REDIRECT_AS_GET (session, msg) &&
@@ -854,14 +876,14 @@ soup_session_would_redirect (SoupSession *session, SoupMessage *msg)
 	new_uri = redirection_uri (msg);
 	if (!new_uri)
 		return FALSE;
-	if (!new_uri->host || !*new_uri->host ||
+	if (!g_uri_get_host (new_uri) || !*g_uri_get_host (new_uri) ||
 	    (!soup_uri_is_http (new_uri, priv->http_aliases) &&
 	     !soup_uri_is_https (new_uri, priv->https_aliases))) {
-		soup_uri_free (new_uri);
+		g_uri_unref (new_uri);
 		return FALSE;
 	}
 
-	soup_uri_free (new_uri);
+	g_uri_unref (new_uri);
 	return TRUE;
 }
 
@@ -892,7 +914,7 @@ soup_session_would_redirect (SoupSession *session, SoupMessage *msg)
 gboolean
 soup_session_redirect_message (SoupSession *session, SoupMessage *msg)
 {
-	SoupURI *new_uri;
+	GUri *new_uri;
 
 	new_uri = redirection_uri (msg);
 	if (!new_uri)
@@ -910,7 +932,7 @@ soup_session_redirect_message (SoupSession *session, SoupMessage *msg)
 	}
 
 	soup_message_set_uri (msg, new_uri);
-	soup_uri_free (new_uri);
+	g_uri_unref (new_uri);
 
 	soup_session_requeue_message (session, msg);
 	return TRUE;
@@ -1092,6 +1114,7 @@ free_unused_host (gpointer user_data)
 {
 	SoupSessionHost *host = (SoupSessionHost *) user_data;
 	SoupSessionPrivate *priv = soup_session_get_instance_private (host->session);
+	GUri *uri = host->uri;
 
 	g_mutex_lock (&priv->conn_lock);
 
@@ -1106,10 +1129,10 @@ free_unused_host (gpointer user_data)
 	/* This will free the host in addition to removing it from the
 	 * hash table
 	 */
-	if (host->uri->scheme == SOUP_URI_SCHEME_HTTPS)
-		g_hash_table_remove (priv->https_hosts, host->uri);
+	if (soup_uri_is_https (uri, NULL))
+		g_hash_table_remove (priv->https_hosts, uri);
 	else
-		g_hash_table_remove (priv->http_hosts, host->uri);
+		g_hash_table_remove (priv->http_hosts, uri);
 	g_mutex_unlock (&priv->conn_lock);
 
 	return FALSE;
@@ -1236,7 +1259,7 @@ soup_session_set_item_status (SoupSession          *session,
 			      guint                 status_code,
 			      GError               *error)
 {
-	SoupURI *uri = NULL;
+	GUri *uri = NULL;
 
 	switch (status_code) {
 	case SOUP_STATUS_CANT_RESOLVE:
@@ -1264,10 +1287,10 @@ soup_session_set_item_status (SoupSession          *session,
 
 	if (error)
 		soup_message_set_status_full (item->msg, status_code, error->message);
-	else if (uri && uri->host) {
+	else if (uri && g_uri_get_host (uri)) {
 		char *msg = g_strdup_printf ("%s (%s)",
 					     soup_status_get_phrase (status_code),
-					     uri->host);
+					     g_uri_get_host (uri));
 		soup_message_set_status_full (item->msg, status_code, msg);
 		g_free (msg);
 	} else
@@ -1423,7 +1446,7 @@ tunnel_connect (SoupMessageQueueItem *item)
 {
 	SoupSession *session = item->session;
 	SoupMessageQueueItem *tunnel_item;
-	SoupURI *uri;
+	GUri *uri;
 	SoupMessage *msg;
 
 	item->state = SOUP_MESSAGE_TUNNELING;
@@ -3757,26 +3780,28 @@ SoupRequest *
 soup_session_request (SoupSession *session, const char *uri_string,
 		      GError **error)
 {
-	SoupURI *uri;
+	GUri *uri;
 	SoupRequest *req;
+        GError *local_error = NULL;
 
-	uri = soup_uri_new (uri_string);
+	uri = g_uri_parse (uri_string, SOUP_HTTP_URI_FLAGS, &local_error);
 	if (!uri) {
 		g_set_error (error, SOUP_REQUEST_ERROR,
 			     SOUP_REQUEST_ERROR_BAD_URI,
-			     _("Could not parse URI “%s”"), uri_string);
+			     _("Could not parse URI “%s”: %s"), uri_string, local_error->message);
+                g_error_free (local_error);
 		return NULL;
 	}
 
 	req = soup_session_request_uri (session, uri, error);
-	soup_uri_free (uri);
+	g_uri_unref (uri);
 	return req;
 }
 
 /**
  * soup_session_request_uri:
  * @session: a #SoupSession
- * @uri: a #SoupURI representing the URI to retrieve
+ * @uri: a #GUri representing the URI to retrieve
  * @error: return location for a #GError, or %NULL
  *
  * Creates a #SoupRequest for retrieving @uri.
@@ -3787,7 +3812,7 @@ soup_session_request (SoupSession *session, const char *uri_string,
  * Since: 2.42
  */
 SoupRequest *
-soup_session_request_uri (SoupSession *session, SoupURI *uri,
+soup_session_request_uri (SoupSession *session, GUri *uri,
 			  GError **error)
 {
 	SoupSessionPrivate *priv;
@@ -3797,11 +3822,11 @@ soup_session_request_uri (SoupSession *session, SoupURI *uri,
 
 	priv = soup_session_get_instance_private (session);
 
-	request_type = (GType)GPOINTER_TO_SIZE (g_hash_table_lookup (priv->request_types, uri->scheme));
+	request_type = (GType)GPOINTER_TO_SIZE (g_hash_table_lookup (priv->request_types, g_uri_get_scheme (uri)));
 	if (!request_type) {
 		g_set_error (error, SOUP_REQUEST_ERROR,
 			     SOUP_REQUEST_ERROR_UNSUPPORTED_URI_SCHEME,
-			     _("Unsupported URI scheme “%s”"), uri->scheme);
+			     _("Unsupported URI scheme “%s”"), g_uri_get_scheme (uri));
 		return NULL;
 	}
 
@@ -3872,7 +3897,7 @@ soup_session_request_http (SoupSession  *session,
  * soup_session_request_http_uri:
  * @session: a #SoupSession
  * @method: an HTTP method
- * @uri: a #SoupURI representing the URI to retrieve
+ * @uri: a #GUri representing the URI to retrieve
  * @error: return location for a #GError, or %NULL
  *
  * Creates a #SoupRequest for retrieving @uri, which must be an
@@ -3887,7 +3912,7 @@ soup_session_request_http (SoupSession  *session,
 SoupRequestHTTP *
 soup_session_request_http_uri (SoupSession  *session,
 			       const char   *method,
-			       SoupURI      *uri,
+			       GUri         *uri,
 			       GError      **error)
 {
 	SoupRequest *req;
@@ -4175,13 +4200,13 @@ soup_session_websocket_connect_finish (SoupSession      *session,
 	return g_task_propagate_pointer (G_TASK (result), error);
 }
 
-SoupURI *
+GUri *
 soup_session_get_message_proxy_uri (SoupSession *session,
 				    SoupMessage *msg)
 {
 	SoupSessionPrivate *priv = soup_session_get_instance_private (session);
 	SoupMessageQueueItem *item;
-	SoupURI *uri;
+	GUri *uri;
 
 	item = soup_message_queue_lookup (priv->queue, msg);
 	if (!item)
