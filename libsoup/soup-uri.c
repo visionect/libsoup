@@ -439,7 +439,7 @@ soup_uri_host_equal (gconstpointer v1, gconstpointer v2)
 
         if (one == two)
                 return TRUE;
-	if (!g_ascii_strcasecmp (g_uri_get_scheme (one), g_uri_get_scheme (two)))
+	if (g_ascii_strcasecmp (g_uri_get_scheme (one), g_uri_get_scheme (two)) != 0)
 		return FALSE;
 
         one_port = g_uri_get_port (one);
