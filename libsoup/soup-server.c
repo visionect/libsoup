@@ -965,7 +965,7 @@ static GUri *
 uri_set_path (GUri *uri, const char *path)
 {
         return g_uri_build_with_user (
-                g_uri_get_flags (uri) ^ G_URI_FLAGS_ENCODED_PATH,
+                g_uri_get_flags (uri),
                 g_uri_get_scheme (uri),
                 g_uri_get_user (uri),
                 g_uri_get_password (uri),
@@ -1012,6 +1012,7 @@ got_headers (SoupMessage *msg, SoupClientContext *client)
 
 	if (!priv->raw_paths && g_uri_get_flags (uri) & G_URI_FLAGS_ENCODED_PATH) {
 		char *decoded_path;
+		GUri *decoded_uri;
 
                 decoded_path = g_uri_unescape_string (g_uri_get_path (uri), NULL);
 
@@ -1031,9 +1032,10 @@ got_headers (SoupMessage *msg, SoupClientContext *client)
 			return;
 		}
 
-                uri = uri_set_path (uri, decoded_path);
-                soup_message_set_uri (msg, uri);
+                decoded_uri = uri_set_path (uri, decoded_path);
+                soup_message_set_uri_no_normalize (msg, decoded_uri);
 		g_free (decoded_path);
+		g_uri_unref (decoded_uri);
 	}
 
 	/* Now handle authentication. (We do this here so that if

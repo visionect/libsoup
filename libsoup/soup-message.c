@@ -1697,6 +1697,19 @@ soup_message_set_uri (SoupMessage *msg, GUri *uri)
 	g_object_notify (G_OBJECT (msg), SOUP_MESSAGE_URI);
 }
 
+void
+soup_message_set_uri_no_normalize (SoupMessage *msg,
+				   GUri        *uri)
+{
+	SoupMessagePrivate *priv = soup_message_get_instance_private (msg);
+
+	if (priv->uri)
+                g_uri_unref (priv->uri);
+        priv->uri = g_uri_ref (uri);
+
+	g_object_notify (G_OBJECT (msg), SOUP_MESSAGE_URI);
+}
+
 /**
  * soup_message_get_uri:
  * @msg: a #SoupMessage

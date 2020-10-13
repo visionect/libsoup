@@ -176,5 +176,8 @@ void                soup_message_set_bytes_for_sniffing (SoupMessage        *msg
 
 const char *soup_http_version_to_string      (SoupHTTPVersion version);
 
+void soup_message_set_uri_no_normalize (SoupMessage *msg,
+					GUri        *uri);
+
 
 #endif /* __SOUP_MESSAGE_PRIVATE_H__ */
