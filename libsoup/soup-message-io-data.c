@@ -116,7 +116,7 @@ static gboolean
 message_io_is_paused (GObject *msg)
 {
 	if (SOUP_IS_MESSAGE (msg))
-		return soup_message_is_io_paused (SOUP_MESSAGE (msg));
+		return soup_message_io_is_paused (SOUP_MESSAGE (msg));
 
 	if (SOUP_IS_SERVER_MESSAGE (msg))
 		return soup_server_message_is_io_paused (SOUP_SERVER_MESSAGE (msg));

@@ -15,6 +15,7 @@
 #include "soup-body-input-stream.h"
 #include "soup-body-output-stream.h"
 #include "soup-filter-input-stream.h"
+#include "soup-message-io-backend.h"
 #include "soup-server-message-private.h"
 #include "soup-misc.h"
 #include "soup-socket.h"

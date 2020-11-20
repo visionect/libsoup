@@ -13,6 +13,7 @@
 #include "soup.h"
 #include "soup-io-stream.h"
 #include "soup-message-queue-item.h"
+#include "soup-message-io-http1.h"
 #include "soup-socket-properties.h"
 #include "soup-private-enum-types.h"
 #include <gio/gnetworking.h>
@@ -1067,7 +1068,10 @@ soup_connection_send_request (SoupConnection           *conn,
 	else
 		priv->reusable = FALSE;
 
-	soup_message_send_request (item, completion_cb, user_data);
+        SoupMessageIOHTTP1 *http1 = soup_message_io_http1_new ();
+        soup_message_set_io_data (item->msg, SOUP_MESSAGE_IO_BACKEND (http1));
+        soup_message_io_backend_send_item (SOUP_MESSAGE_IO_BACKEND (http1),
+                                           item, completion_cb, user_data);
 }
 
 GTlsCertificate *

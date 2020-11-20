@@ -59,7 +59,7 @@ struct _SoupMessage {
 };
 
 typedef struct {
-	SoupClientMessageIOData *io_data;
+	SoupMessageIOBackend *io_data;
 
         SoupMessageHeaders *request_headers;
 	SoupMessageHeaders *response_headers;
@@ -166,7 +166,7 @@ soup_message_finalize (GObject *object)
 
 	soup_message_set_connection (msg, NULL);
 
-	soup_client_message_io_data_free (priv->io_data);
+        g_clear_object (&priv->io_data);
 
 	g_clear_pointer (&priv->uri, g_uri_unref);
 	g_clear_pointer (&priv->first_party, g_uri_unref);
@@ -2136,7 +2136,7 @@ soup_message_get_priority (SoupMessage *msg)
 	return priv->priority;
 }
 
-SoupClientMessageIOData *
+SoupMessageIOBackend *
 soup_message_get_io_data (SoupMessage *msg)
 {
 	SoupMessagePrivate *priv = soup_message_get_instance_private (msg);
@@ -2145,12 +2145,21 @@ soup_message_get_io_data (SoupMessage *msg)
 }
 
 void
-soup_message_set_io_data (SoupMessage             *msg,
-			  SoupClientMessageIOData *io)
+soup_message_clear_io_data (SoupMessage *msg)
 {
 	SoupMessagePrivate *priv = soup_message_get_instance_private (msg);
 
-	soup_client_message_io_data_free (priv->io_data);
+        g_clear_object (&priv->io_data);
+}
+
+void
+soup_message_set_io_data (SoupMessage             *msg,
+			  SoupMessageIOBackend    *io)
+{
+	SoupMessagePrivate *priv = soup_message_get_instance_private (msg);
+
+        g_assert (!priv->io_data);
+
 	priv->io_data = io;
 }
 
@@ -2179,6 +2188,55 @@ soup_message_set_bytes_for_sniffing (SoupMessage *msg, gsize bytes)
 	SoupMessagePrivate *priv = soup_message_get_instance_private (msg);
 
 	priv->bytes_for_sniffing = bytes;
+}
+
+static gint
+processing_stage_cmp (gconstpointer a,
+                      gconstpointer b)
+{
+	SoupProcessingStage stage_a = soup_content_processor_get_processing_stage (SOUP_CONTENT_PROCESSOR ((gpointer)a));
+	SoupProcessingStage stage_b = soup_content_processor_get_processing_stage (SOUP_CONTENT_PROCESSOR ((gpointer)b));
+
+	if (stage_a > stage_b)
+		return 1;
+	if (stage_a == stage_b)
+		return 0;
+	return -1;
+}
+
+GInputStream *
+soup_message_setup_body_istream (GInputStream *body_stream,
+				 SoupMessage *msg,
+				 SoupSession *session,
+				 SoupProcessingStage start_at_stage)
+{
+	GInputStream *istream;
+	GSList *p, *processors;
+
+	istream = g_object_ref (body_stream);
+
+	processors = soup_session_get_features (session, SOUP_TYPE_CONTENT_PROCESSOR);
+	processors = g_slist_sort (processors, processing_stage_cmp);
+
+	for (p = processors; p; p = p->next) {
+		GInputStream *wrapper;
+		SoupContentProcessor *processor;
+
+		processor = SOUP_CONTENT_PROCESSOR (p->data);
+		if (soup_message_disables_feature (msg, p->data) ||
+		    soup_content_processor_get_processing_stage (processor) < start_at_stage)
+			continue;
+
+		wrapper = soup_content_processor_wrap_input (processor, istream, msg, NULL);
+		if (wrapper) {
+			g_object_unref (istream);
+			istream = wrapper;
+		}
+	}
+
+	g_slist_free (processors);
+
+	return istream;
 }
 
 GInputStream *
