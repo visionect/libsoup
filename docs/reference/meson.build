@@ -36,6 +36,7 @@ ignore_headers = [
   'soup-message-io-backend.h',
   'soup-message-io-data.h',
   'soup-message-io-http1.h',
+  'soup-message-io-source.h',
   'soup-uri-utils-private.h',
   'soup-session-feature-private.h',
   'soup-message-metrics-private.h',

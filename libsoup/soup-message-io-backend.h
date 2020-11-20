@@ -23,14 +23,13 @@
 #include "soup-types.h"
 #include "soup-message-headers.h"
 #include "soup-filter-input-stream.h"
+#include "soup-message-io-source.h"
 
 G_BEGIN_DECLS
 
 #define SOUP_TYPE_MESSAGE_IO_BACKEND (soup_message_io_backend_get_type ())
 
 G_DECLARE_INTERFACE (SoupMessageIOBackend, soup_message_io_backend, SOUP, MESSAGE_IO_BACKEND, GObject)
-
-typedef gboolean (*SoupMessageSourceFunc) (SoupMessage *, gpointer);
 
 typedef enum {
 	SOUP_MESSAGE_IO_COMPLETE,
@@ -53,7 +52,7 @@ struct _SoupMessageIOBackendInterface
         void (*stolen) (SoupMessage *);
         gboolean (*is_paused) (SoupMessage *);
         gboolean (*in_progress) (SoupMessage *);
-        GSource * (*get_source) (SoupMessage *, GCancellable *, SoupMessageSourceFunc, gpointer);
+        GSource * (*get_source) (SoupMessage *, GCancellable *, SoupMessageIOSourceFunc, gpointer);
         GInputStream * (*get_response_istream) (SoupMessage *, GError **);
         void (*run) (SoupMessage *, gboolean);
         gboolean (*run_until_read) (SoupMessage *, GCancellable *, GError **);
