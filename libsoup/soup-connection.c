@@ -15,6 +15,7 @@
 #include "soup-message-queue-item.h"
 #include "soup-socket-properties.h"
 #include "soup-private-enum-types.h"
+#include "soup-tls-interaction.h"
 #include <gio/gnetworking.h>
 
 struct _SoupConnection {
@@ -38,6 +39,8 @@ typedef struct {
 	GSource     *idle_timeout_src;
 	gboolean     reusable;
 
+        GTlsCertificate *tls_client_cert;
+
 	GCancellable *cancellable;
 } SoupConnectionPrivate;
 
@@ -46,6 +49,7 @@ G_DEFINE_TYPE_WITH_PRIVATE (SoupConnection, soup_connection, G_TYPE_OBJECT)
 enum {
 	EVENT,
 	ACCEPT_CERTIFICATE,
+        REQUEST_CERTIFICATE,
 	DISCONNECTED,
 	LAST_SIGNAL
 };
@@ -101,6 +105,7 @@ soup_connection_finalize (GObject *object)
 	}
 
 	g_clear_object (&priv->iostream);
+        g_clear_object (&priv->tls_client_cert);
 
 	G_OBJECT_CLASS (soup_connection_parent_class)->finalize (object);
 }
@@ -210,6 +215,16 @@ soup_connection_class_init (SoupConnectionClass *connection_class)
                               G_TYPE_BOOLEAN, 2,
                               G_TYPE_TLS_CERTIFICATE,
                               G_TYPE_TLS_CERTIFICATE_FLAGS);
+        signals[REQUEST_CERTIFICATE] =
+                g_signal_new ("request-certificate",
+                              G_OBJECT_CLASS_TYPE (object_class),
+                              G_SIGNAL_RUN_LAST,
+                              0,
+                              g_signal_accumulator_true_handled, NULL,
+                              NULL,
+                              G_TYPE_BOOLEAN, 2,
+                              G_TYPE_TLS_CLIENT_CONNECTION,
+                              G_TYPE_TASK);
 	signals[DISCONNECTED] =
 		g_signal_new ("disconnected",
 			      G_OBJECT_CLASS_TYPE (object_class),
@@ -456,14 +471,18 @@ new_tls_connection (SoupConnection    *conn,
 {
         SoupConnectionPrivate *priv = soup_connection_get_instance_private (conn);
         GTlsClientConnection *tls_connection;
+        GTlsInteraction *tls_interaction;
 
+        tls_interaction = priv->socket_props->tls_interaction ? g_object_ref (priv->socket_props->tls_interaction) : soup_tls_interaction_new (conn);
         tls_connection = g_initable_new (g_tls_backend_get_client_connection_type (g_tls_backend_get_default ()),
                                          priv->cancellable, error,
                                          "base-io-stream", connection,
                                          "server-identity", priv->remote_connectable,
                                          "require-close-notify", FALSE,
-                                         "interaction", priv->socket_props->tls_interaction,
+                                         "interaction", tls_interaction,
                                          NULL);
+        g_object_unref (tls_interaction);
+
         if (!tls_connection)
                 return NULL;
 
@@ -1090,6 +1109,69 @@ soup_connection_get_tls_certificate_errors (SoupConnection *conn)
 		return 0;
 
 	return g_tls_connection_get_peer_certificate_errors (G_TLS_CONNECTION (priv->connection));
+}
+
+void
+soup_connection_set_tls_client_certificate (SoupConnection  *conn,
+                                            GTlsCertificate *certificate)
+{
+        SoupConnectionPrivate *priv = soup_connection_get_instance_private (conn);
+
+        if (G_IS_TLS_CONNECTION (priv->connection)) {
+                g_tls_connection_set_certificate (G_TLS_CONNECTION (priv->connection),
+                                                  certificate);
+                g_clear_object (&priv->tls_client_cert);
+                return;
+        }
+
+        if (priv->tls_client_cert == certificate)
+                return;
+
+        g_clear_object (&priv->tls_client_cert);
+        priv->tls_client_cert = g_object_ref (certificate);
+}
+
+void
+soup_connection_request_tls_certificate (SoupConnection *conn,
+                                         GTlsConnection *connection,
+                                         GTask          *task)
+{
+        SoupConnectionPrivate *priv = soup_connection_get_instance_private (conn);
+        gboolean handled = FALSE;
+
+        if (!G_IS_TLS_CONNECTION (priv->connection) || G_TLS_CONNECTION (priv->connection) != connection) {
+                g_task_return_int (task, G_TLS_INTERACTION_FAILED);
+                return;
+        }
+
+        if (priv->tls_client_cert) {
+                soup_connection_complete_tls_certificate_request (conn,
+                                                                  priv->tls_client_cert,
+                                                                  g_object_ref (task));
+                g_clear_object (&priv->tls_client_cert);
+                return;
+        }
+
+        g_signal_emit (conn, signals[REQUEST_CERTIFICATE], 0, connection, task, &handled);
+        if (!handled)
+                g_task_return_int (task, G_TLS_INTERACTION_FAILED);
+}
+
+void
+soup_connection_complete_tls_certificate_request (SoupConnection  *conn,
+                                                  GTlsCertificate *certificate,
+                                                  GTask           *task)
+{
+        SoupConnectionPrivate *priv = soup_connection_get_instance_private (conn);
+
+        if (G_IS_TLS_CONNECTION (priv->connection) && certificate) {
+                g_tls_connection_set_certificate (G_TLS_CONNECTION (priv->connection),
+                                                  certificate);
+                g_task_return_int (task, G_TLS_INTERACTION_HANDLED);
+        } else {
+                g_task_return_int (task, G_TLS_INTERACTION_FAILED);
+        }
+        g_object_unref (task);
 }
 
 guint64

@@ -72,6 +72,14 @@ void                     soup_connection_message_io_finished (SoupConnection *co
 
 GTlsCertificate     *soup_connection_get_tls_certificate        (SoupConnection *conn);
 GTlsCertificateFlags soup_connection_get_tls_certificate_errors (SoupConnection *conn);
+void                 soup_connection_request_tls_certificate    (SoupConnection *conn,
+                                                                 GTlsConnection *connection,
+                                                                 GTask           *task);
+void                 soup_connection_complete_tls_certificate_request (SoupConnection  *conn,
+                                                                       GTlsCertificate *certificate,
+                                                                       GTask           *task);
+void                 soup_connection_set_tls_client_certificate (SoupConnection  *conn,
+                                                                 GTlsCertificate *certificate);
 
 guint64              soup_connection_get_id                     (SoupConnection *conn);
 
