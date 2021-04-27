@@ -289,7 +289,9 @@ else
   have_autobahn = find_program('wstest', required: get_option('autobahn')).found()
 endif
 
-if not have_apache or not have_autobahn
+gnutls_dep = dependency('gnutls', required : get_option('tests'))
+
+if not have_apache or not have_autobahn or not gnutls_dep.found()
   warning('Some regression tests will not be compiled due to missing libraries or modules. Please check the logs for more details.')
 endif
 
@@ -417,6 +419,7 @@ summary({
     'Tests requiring Apache' : have_apache,
     'Fuzzing tests' : get_option('fuzzing').enabled(),
     'Autobahn tests' : have_autobahn,
+    'PKCS#11 tests' : gnutls_dep.found(),
     'Install tests': get_option('installed_tests'),
     'Unix sockets' : unix_socket_dep.found(),
   },
