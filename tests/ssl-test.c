@@ -1,6 +1,8 @@
 /* -*- Mode: C; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 8 -*- */
 
 #include "test-utils.h"
+#include "soup-connection.h"
+#include "soup-message-private.h"
 #include "soup-server-message-private.h"
 
 #if HAVE_GNUTLS
@@ -299,9 +301,41 @@ request_certificate_password_async_cb (SoupMessage  *msg,
 }
 
 static void
+run_loop_until_connection_destroyed (SoupConnection *conn)
+{
+        GIOStream *stream;
+        GWeakRef stream_ref;
+        GObject *object;
+
+        /* The mock pkcs11 module only supports one session at a time so
+         * this will ensure the GTlsClientConnection is fully closed before
+         * continuing. */
+
+        stream = soup_connection_get_connection (conn);
+        g_weak_ref_init (&stream_ref, stream);
+
+        soup_connection_disconnect (conn);
+        while ((object = g_weak_ref_get (&stream_ref))) {
+                g_message ("Waiting on connection to be destroyed");
+                g_object_unref (object);
+                g_main_context_iteration (g_main_context_default (), FALSE);
+        }
+
+        g_weak_ref_clear (&stream_ref);
+}
+
+static void
+on_got_headers (SoupMessage *msg, SoupConnection **connection)
+{
+        *connection = soup_message_get_connection (msg);
+        g_assert_nonnull (*connection);
+}
+
+static void
 do_tls_interaction_msg_test (gconstpointer data)
 {
         SoupServer *server = (SoupServer *)data;
+        SoupConnection *connection = NULL;
         SoupSession *session;
         SoupMessage *msg;
         GBytes *body;
@@ -423,7 +457,10 @@ do_tls_interaction_msg_test (gconstpointer data)
                 g_signal_connect (msg, "request-certificate-password",
                                 G_CALLBACK (request_certificate_password_cb),
                                 "ABC123");
+                g_signal_connect (msg, "got-headers", G_CALLBACK (on_got_headers),
+                                  &connection);
                 body = soup_test_session_async_send (session, msg, NULL, &error);
+                run_loop_until_connection_destroyed (connection);
                 g_assert_no_error (error);
                 g_clear_error (&error);
                 g_bytes_unref (body);
@@ -454,7 +491,10 @@ do_tls_interaction_msg_test (gconstpointer data)
                 g_signal_connect (msg, "request-certificate-password",
                                 G_CALLBACK (request_certificate_password_async_cb),
                                 "ABC123");
+                g_signal_connect (msg, "got-headers", G_CALLBACK (on_got_headers),
+                                  &connection);
                 body = soup_test_session_async_send (session, msg, NULL, &error);
+                run_loop_until_connection_destroyed (connection);
                 g_assert_no_error (error);
                 g_clear_error (&error);
                 g_bytes_unref (body);

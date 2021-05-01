@@ -1223,3 +1223,11 @@ soup_connection_get_id (SoupConnection *conn)
 
         return priv->id;
 }
+
+GIOStream *
+soup_connection_get_connection (SoupConnection *conn)
+{
+        SoupConnectionPrivate *priv = soup_connection_get_instance_private (conn);
+
+        return priv->connection;
+}

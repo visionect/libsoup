@@ -88,6 +88,8 @@ void                 soup_connection_complete_tls_certificate_password_request (
 
 guint64              soup_connection_get_id                     (SoupConnection *conn);
 
+GIOStream           *soup_connection_get_connection             (SoupConnection *conn);
+
 G_END_DECLS
 
 #endif /* __SOUP_CONNECTION_H__ */
