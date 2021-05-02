@@ -41,6 +41,8 @@ ignore_headers = [
   'soup-client-message-io.h',
   'soup-message-io-completion.h',
   'soup-client-message-io-http1.h',
+  'soup-client-message-io-http2.h',
+  'soup-memory-input-stream.h',
 ]
 
 mkdb_args = [

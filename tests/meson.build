@@ -47,6 +47,7 @@ tests = [
   ['hsts-db', true, []],
   ['logger', true, []],
   ['misc', true, []],
+  ['memory-stream', true, []],
   ['multipart', true, []],
   ['no-ssl', true, []],
   ['ntlm', true, []],
@@ -65,6 +66,12 @@ tests = [
   ['uri-parsing', true, []],
   ['websocket', true, [libz_dep]]
 ]
+
+if quart_found
+  tests += [
+    ['http2', true, []],
+  ]
+endif
 
 if brotlidec_dep.found()
   tests += [

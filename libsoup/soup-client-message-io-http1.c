@@ -1085,6 +1085,37 @@ soup_client_message_io_http1_is_paused (SoupClientMessageIO *iface,
         return io->base.paused;
 }
 
+static gboolean
+soup_client_message_io_http1_in_progress (SoupClientMessageIO *iface,
+                                          SoupMessage         *msg)
+{
+        // In progress as long as object is alive
+        return TRUE;
+}
+
+static gboolean
+soup_client_message_io_http1_is_open (SoupClientMessageIO *iface)
+{
+        /* This is handled in SoupConnection */
+        g_assert_not_reached ();
+        return FALSE;
+}
+
+static gboolean
+soup_client_message_io_http1_is_reusable (SoupClientMessageIO *iface)
+{
+        SoupClientMessageIOHTTP1 *io = (SoupClientMessageIOHTTP1 *)iface;
+        return soup_message_is_keepalive (io->item->msg);
+}
+
+static void
+soup_client_message_io_http1_skip_body (SoupClientMessageIO *iface,
+                                       SoupMessage         *msg)
+{
+        /* This is already handled by SoupSession reading the rest
+         * of the stream */
+}
+
 static const SoupClientMessageIOFuncs io_funcs = {
         soup_client_message_io_http1_destroy,
         soup_client_message_io_http1_finished,
@@ -1097,7 +1128,11 @@ static const SoupClientMessageIOFuncs io_funcs = {
         soup_client_message_io_http1_run,
         soup_client_message_io_http1_run_until_read,
         soup_client_message_io_http1_run_until_read_async,
-        soup_client_message_io_http1_run_until_finish
+        soup_client_message_io_http1_run_until_finish,
+        soup_client_message_io_http1_in_progress,
+        soup_client_message_io_http1_skip_body,
+        soup_client_message_io_http1_is_open,
+        soup_client_message_io_http1_is_reusable,
 };
 
 SoupClientMessageIO *

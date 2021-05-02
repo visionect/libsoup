@@ -106,3 +106,29 @@ soup_client_message_io_get_response_stream (SoupClientMessageIO *io,
 {
         return io->funcs->get_response_stream (io, msg, error);
 }
+
+gboolean
+soup_client_message_io_in_progress (SoupClientMessageIO       *io,
+                                    SoupMessage               *msg)
+{
+        return io->funcs->in_progress (io, msg);
+}
+
+gboolean
+soup_client_message_io_is_open (SoupClientMessageIO       *io)
+{
+        return io->funcs->is_open (io);
+}
+
+gboolean
+soup_client_message_io_is_reusable (SoupClientMessageIO       *io)
+{
+        return io->funcs->is_reusable (io);
+}
+
+void
+soup_client_message_io_skip_body (SoupClientMessageIO       *io,
+                                  SoupMessage               *msg)
+{
+        io->funcs->skip_body (io, msg);
+}

@@ -46,6 +46,12 @@ typedef struct {
                                                gboolean                   blocking,
                                                GCancellable              *cancellable,
                                                GError                   **error);
+        gboolean      (*in_progress)          (SoupClientMessageIO       *io,
+                                               SoupMessage               *msg);
+        void          (*skip_body)            (SoupClientMessageIO       *io,
+                                               SoupMessage               *msg);
+        gboolean      (*is_open)              (SoupClientMessageIO       *io);
+        gboolean      (*is_reusable)          (SoupClientMessageIO       *io);
 } SoupClientMessageIOFuncs;
 
 struct _SoupClientMessageIO {
@@ -87,3 +93,9 @@ gboolean      soup_client_message_io_run_until_finish     (SoupClientMessageIO  
 GInputStream *soup_client_message_io_get_response_stream  (SoupClientMessageIO       *io,
                                                            SoupMessage               *msg,
                                                            GError                   **error);
+gboolean      soup_client_message_io_in_progress           (SoupClientMessageIO       *io,
+                                                           SoupMessage               *msg);
+gboolean      soup_client_message_io_is_open              (SoupClientMessageIO       *io);
+gboolean      soup_client_message_io_is_reusable          (SoupClientMessageIO       *io);
+void          soup_client_message_io_skip_body            (SoupClientMessageIO       *io,
+                                                           SoupMessage               *msg);
