@@ -539,7 +539,6 @@ main (int argc, char **argv)
 	test_init (argc, argv, NULL);
 
 #if HAVE_GNUTLS
-        gnutls_global_set_log_level (4);
         gnutls_global_set_log_function (log_func);
 
         char *module_path = soup_test_build_filename_abs (G_TEST_BUILT, "mock-pkcs11.so", NULL);
