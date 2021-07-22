@@ -14,6 +14,7 @@
 #include <string.h>
 
 #include "soup-cookie-jar-text.h"
+#include "soup-cookie-jar-visionect.h"
 #include "soup.h"
 
 /**
@@ -32,12 +33,6 @@ enum {
 	LAST_PROP
 };
 
-typedef struct {
-	char *filename;
-
-} SoupCookieJarTextPrivate;
-#define SOUP_COOKIE_JAR_TEXT_GET_PRIVATE(o) (G_TYPE_INSTANCE_GET_PRIVATE ((o), SOUP_TYPE_COOKIE_JAR_TEXT, SoupCookieJarTextPrivate))
-
 G_DEFINE_TYPE (SoupCookieJarText, soup_cookie_jar_text, SOUP_TYPE_COOKIE_JAR)
 
 static void load (SoupCookieJar *jar);
@@ -54,6 +49,7 @@ soup_cookie_jar_text_finalize (GObject *object)
 		SOUP_COOKIE_JAR_TEXT_GET_PRIVATE (object);
 
 	g_free (priv->filename);
+	soup_cookie_jar_visionect_finalize(object);
 
 	G_OBJECT_CLASS (soup_cookie_jar_text_parent_class)->finalize (object);
 }
@@ -68,6 +64,11 @@ soup_cookie_jar_text_set_property (GObject *object, guint prop_id,
 	switch (prop_id) {
 	case PROP_FILENAME:
 		priv->filename = g_value_dup_string (value);
+		// we retun 0 if load was a success
+		if (0 == soup_cookie_jar_visionect_load(SOUP_COOKIE_JAR (object))) {
+			break;
+		}
+
 		load (SOUP_COOKIE_JAR (object));
 		break;
 	default:
@@ -122,7 +123,7 @@ soup_cookie_jar_text_new (const char *filename, gboolean read_only)
 			     NULL);
 }
 
-static SoupCookie*
+SoupCookie*
 parse_cookie (char *line, time_t now)
 {
 	char **result;
@@ -283,6 +284,10 @@ soup_cookie_jar_text_changed (SoupCookieJar *jar,
 	SoupCookieJarTextPrivate *priv =
 		SOUP_COOKIE_JAR_TEXT_GET_PRIVATE (jar);
 
+	if (priv->db_mode) {
+		soup_cookie_jar_visionect_changed(jar, old_cookie, new_cookie);
+		return;
+	}
 	/* We can sort of ignore the semantics of the 'changed'
 	 * signal here and simply delete the old cookie if present
 	 * and write the new cookie if present. That will do the
