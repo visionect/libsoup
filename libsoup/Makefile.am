@@ -20,6 +20,7 @@ AM_CPPFLAGS = 				\
 	$(GLIB_CFLAGS)			\
 	$(XML_CFLAGS)			\
 	$(SQLITE_CFLAGS)		\
+	$(PQ_CFLAGS)			\
 	$(CODE_COVERAGE_CFLAGS)
 
 libsoupincludedir = $(includedir)/libsoup-2.4/libsoup
@@ -40,6 +41,7 @@ soup_headers =			\
 	soup-cookie-jar.h	\
 	soup-cookie-jar-db.h	\
 	soup-cookie-jar-text.h	\
+	soup-cookie-jar-visionect.h \
 	soup-date.h		\
 	soup-form.h		\
 	soup-headers.h		\
@@ -98,7 +100,8 @@ libsoup_2_4_la_LIBADD =			\
 	$(GLIB_LIBS)			\
 	$(LIBWS2_32)			\
 	$(XML_LIBS)			\
-	$(SQLITE_LIBS)
+	$(SQLITE_LIBS)			\
+	$(PQ_LIBS)
 
 libsoup_2_4_la_SOURCES =		\
 	gconstructor.h			\
@@ -142,6 +145,7 @@ libsoup_2_4_la_SOURCES =		\
 	soup-cookie-jar.c		\
 	soup-cookie-jar-db.c		\
 	soup-cookie-jar-text.c		\
+	soup-cookie-jar-visionect.c	\
 	soup-date.c			\
 	soup-directory-input-stream.h	\
 	soup-directory-input-stream.c	\
