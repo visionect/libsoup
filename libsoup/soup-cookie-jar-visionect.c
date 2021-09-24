@@ -24,6 +24,9 @@
 
 gboolean debugMode = false;
 
+gboolean
+is_db_mode(char *uuid);
+
 int
 soup_cookie_jar_visionect_try_connect(SoupCookieJarTextPrivate *jar);
 
@@ -62,14 +65,14 @@ static void sleep_ms(int ms) {
 	nanosleep(&ts, NULL);
 }
 
-static void vlog(char *fmt, ...) {
+static void vlog(char *uuid, char *fmt, ...) {
 	va_list args;
 	char *newFmt;
 	char *ts = g_malloc(32);
 	time_t t = time(NULL);
 
 	strftime(ts, 32, "%Y-%m-%dT%H:%M:%S%z", gmtime(&t));
-	newFmt = g_strdup_printf("%s %s", ts, fmt);
+	newFmt = g_strdup_printf("%s INFO %s %s\n", ts, uuid, fmt);
 
 	va_start(args, fmt);
 	vfprintf(stderr, newFmt, args);
@@ -147,7 +150,7 @@ soup_cookie_jar_visionect_finalize (GObject *object)
 }
 
 gboolean
-is_db_mode()
+is_db_mode(char *uuid)
 {
 	char *psql_host;
 	char *psql_port;
@@ -162,15 +165,15 @@ is_db_mode()
 	psql_db   = getenv("VSS_COOKIE_DB_NAME");
 
 	if (psql_host == NULL || psql_port == NULL || psql_user == NULL || psql_pass == NULL || psql_db == NULL) {
-		vlog("Not all required env variables set:\n" \
-		"VSS_COOKIE_DB_ADDR, VSS_COOKIE_DB_PORT,\n" \
-		"VSS_COOKIE_DB_USER, VSS_COOKIE_DB_PASS, VSS_COOKIE_DB_NAME\n"\
-		"Cookie storage configured as text files.\n");
+		vlog(uuid, "Not all required env variables set: " \
+		"VSS_COOKIE_DB_ADDR, VSS_COOKIE_DB_PORT, " \
+		"VSS_COOKIE_DB_USER, VSS_COOKIE_DB_PASS, VSS_COOKIE_DB_NAME "\
+		"Cookie storage configured as text files.");
 
 		return false;
 	}
 
-	vlog("Cookie storage configured for postgresql.\n");
+	vlog(uuid, "Cookie storage configured for postgresql.");
 	return true;
 }
 
@@ -192,10 +195,6 @@ soup_cookie_jar_visionect_load (SoupCookieJar *jar)
 		debugMode = true;
 	}
 
-	if (!is_db_mode()) {
-		return -1;
-	}
-
 	// get the uuid from file name.. first try to remove the path
 	s = g_strrstr(priv->filename, "/");
 	if (s != NULL) {
@@ -212,15 +211,20 @@ soup_cookie_jar_visionect_load (SoupCookieJar *jar)
 
 	s = strstr(priv->uuid, "-cookies.txt");
 	if (s == NULL) {
-		vlog("skipping db mode, cookie file is named %s\n", priv->filename);
+		vlog("", "skipping db mode, cookie file is named %s", priv->filename);
 		return -1;
 	}
 	*s = 0; // remove suffix
 
 	if (strlen(priv->uuid) != 36) {
-		vlog("skipping db mode, invalid uuid %s len %d, cookie file is named %s\n", priv->uuid, strlen(priv->uuid), priv->filename);
+		vlog("", "skipping db mode, invalid uuid %s len %d, cookie file is named %s", priv->uuid, strlen(priv->uuid), priv->filename);
 		return -1;
 	}
+
+	if (!is_db_mode(priv->uuid)) {
+		return -1;
+	}
+
 	//we set db mode only if cookie name matches
 	priv->db_mode = true;
 
@@ -278,15 +282,15 @@ soup_cookie_jar_visionect_try_connect(SoupCookieJarTextPrivate *jar)
 		psql_db   = getenv("VSS_COOKIE_DB_NAME");
 
 		if (psql_host == NULL || psql_port == NULL || psql_user == NULL || psql_pass == NULL || psql_db == NULL) {
-			vlog("You must set all listed env variables:\n" \
-			"VSS_COOKIE_DB_ADDR, VSS_COOKIE_DB_PORT,\n" \
-			"VSS_COOKIE_DB_USER, VSS_COOKIE_DB_PASS, VSS_COOKIE_DB_NAME\n");
+			vlog(jar->uuid, "You must set all listed env variables: " \
+			"VSS_COOKIE_DB_ADDR, VSS_COOKIE_DB_PORT, " \
+			"VSS_COOKIE_DB_USER, VSS_COOKIE_DB_PASS, VSS_COOKIE_DB_NAME");
 		}
 
 		q = g_strdup_printf("host=%s port=%s user=%s password=%s dbname=%s application_name=vss_cookie_jar", psql_host, psql_port, psql_user, psql_pass, psql_db);
 		jar->conn = PQconnectdb(q);
 		if (PQstatus(jar->conn) != CONNECTION_OK) {
-			vlog("Connection to database failed: %s\n",
+			vlog(jar->uuid, "Connection to database failed: %s",
 				PQerrorMessage(jar->conn));
 
 			PQfinish(jar->conn);
@@ -309,7 +313,7 @@ rt_soup_cookie_jar_visionect_try_connect(SoupCookieJarTextPrivate *jar) {
 
 	if (soup_cookie_jar_visionect_try_connect(jar) != 0) {
 		sleep_ms(500);
-		vlog("retrying soup_cookie_jar_visionect_try_connect %s", priv->uuid);
+		vlog(priv->uuid, "retrying soup_cookie_jar_visionect_try_connect");
 		return soup_cookie_jar_visionect_try_connect(jar);
 	}
 
@@ -343,8 +347,8 @@ static char
 	res = PQexec(conn, q);
 
 	if (PQresultStatus(res) != PGRES_TUPLES_OK) {
-		vlog("Selecting old cookies for device %s failed: %s\n",
-			uuid, PQresultErrorMessage(res));
+		vlog(uuid, "Selecting old cookies failed: %s",
+			PQresultErrorMessage(res));
 
 		PQclear(res);
 		g_free(q);
@@ -378,8 +382,8 @@ psql_delete_old_cookies(PGconn *conn, char *uuid)
 	res = PQexec(conn, q);
 
 	if (PQresultStatus(res) != PGRES_COMMAND_OK) {
-		vlog("Deleting old cookies for device %s failed: %s\n",
-			uuid, PQresultErrorMessage(res));
+		vlog(uuid, "Deleting old cookies failed: %s",
+			PQresultErrorMessage(res));
 
 		PQclear(res);
 		g_free(q);
@@ -397,7 +401,7 @@ rt_psql_delete_old_cookies(PGconn *conn, char *uuid)
 {
 	if (psql_delete_old_cookies(conn, uuid) != 0) {
 		sleep_ms(500);
-		vlog("retrying psql_delete_old_cookies %s", uuid);
+		vlog(uuid, "retrying psql_delete_old_cookies");
 		return psql_delete_old_cookies(conn, uuid);
 	}
 
@@ -456,7 +460,7 @@ rt_migrate_and_load_old (SoupCookieJar *jar)
 
 	if (migrate_and_load_old(jar) != 0) {
 		sleep_ms(500);
-		vlog("retrying migrate_and_load_old %s", priv->uuid);
+		vlog(priv->uuid, "retrying migrate_and_load_old");
 		migrate_and_load_old(jar);
 	}
 }
@@ -525,8 +529,8 @@ psql_write_cookie(PGconn *conn, char *uuid, SoupCookie *cookie)
  			PARAM_COUNT, NULL, paramValues, NULL, NULL, 1);
 
 	if (PQresultStatus(res) != PGRES_COMMAND_OK) {
-		vlog("Cookie insert for device %s failed: %s\n",
-			uuid, PQresultErrorMessage(res));
+		vlog(uuid, "Cookie insert failed: %s",
+			PQresultErrorMessage(res));
 
 		g_free((void *)paramValues[5]);
 		g_free((void *)paramValues[7]);
@@ -548,7 +552,7 @@ rt_psql_write_cookie(PGconn *conn, char *uuid, SoupCookie *cookie)
 {
 	if (psql_write_cookie(conn, uuid, cookie) != 0) {
 		sleep_ms(500);
-		vlog("retrying psql_write_cookie %s", uuid);
+		vlog(uuid, "retrying psql_write_cookie");
 		return psql_write_cookie(conn, uuid, cookie);
 	}
 
@@ -562,7 +566,7 @@ psql_delete_cookie (PGconn *conn, char *uuid, SoupCookie *cookie)
 	PGresult *res;
 	const char *paramValues[PARAM_COUNT];
 
-	debug(uuid, cookie, "Deleteing cookie.");
+	debug(uuid, cookie, "Deleting cookie.");
 
 	paramValues[0] = uuid;
 	paramValues[1] = cookie->domain;
@@ -571,8 +575,8 @@ psql_delete_cookie (PGconn *conn, char *uuid, SoupCookie *cookie)
 	res = PQexecParams(conn, "DELETE FROM cookies WHERE uuid = $1 AND host = $2 AND name = $3 AND path = $4;", PARAM_COUNT, NULL, paramValues, NULL, NULL, 1);
 
 	if (PQresultStatus(res) != PGRES_COMMAND_OK) {
-		vlog("Deleting cookie for device %s failed: %s\n",
-			uuid, PQresultErrorMessage(res));
+		vlog(uuid, "Deleting cookie failed: %s",
+			PQresultErrorMessage(res));
 
 		PQclear(res);
 		return -1;
@@ -588,7 +592,7 @@ rt_psql_delete_cookie (PGconn *conn, char *uuid, SoupCookie *cookie)
 {
 	if (psql_delete_cookie(conn, uuid, cookie) != 0) {
 		sleep_ms(500);
-		vlog("retrying psql_delete_cookie %s", uuid);
+		vlog(uuid, "retrying psql_delete_cookie");
 		return psql_delete_cookie(conn, uuid, cookie);
 	}
 
@@ -621,8 +625,8 @@ psql_load_cookies(SoupCookieJar *jar)
 		PARAM_COUNT, NULL, paramValues, NULL, NULL, 1);
 
 	if (PQresultStatus(res) != PGRES_TUPLES_OK) {
-		vlog("Selecting cookies for device %s failed: %s\n",
-			priv->uuid, PQresultErrorMessage(res));
+		vlog(priv->uuid, "Selecting cookies failed: %s",
+			PQresultErrorMessage(res));
 
 		PQclear(res);
 		return -1;
@@ -696,7 +700,7 @@ rt_psql_load_cookies (SoupCookieJar *jar)
 
 	if (psql_load_cookies(jar) != 0) {
 		sleep_ms(500);
-		vlog("retrying psql_load_cookies %s", priv->uuid);
+		vlog(priv->uuid, "retrying psql_load_cookies");
 		return psql_load_cookies(jar);
 	}
 
