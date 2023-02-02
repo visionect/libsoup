@@ -39,16 +39,7 @@ SOUP_AVAILABLE_IN_ALL
 G_DECLARE_FINAL_TYPE (SoupCookieJarText, soup_cookie_jar_text, SOUP, COOKIE_JAR_TEXT, SoupCookieJar)
 
 
-void
-soup_cookie_jar_visionect_finalize (SoupCookieJarTextPrivate *jar);
 
-int
-soup_cookie_jar_visionect_load (SoupCookieJar *jar, SoupCookieJarTextPrivate *priv);
-
-void
-soup_cookie_jar_visionect_changed (SoupCookieJarTextPrivate *jar,
-				  SoupCookie    *old_cookie,
-				  SoupCookie    *new_cookie);
 
 // forward declarations for functions implemented in soup_cookie_jar_text
 SoupCookie*

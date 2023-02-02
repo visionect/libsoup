@@ -28,6 +28,15 @@ gboolean debugMode = false;
 gboolean
 is_db_mode(char *uuid);
 
+void
+soup_cookie_jar_visionect_finalize (SoupCookieJarTextPrivate *jar);
+
+int
+soup_cookie_jar_visionect_load (SoupCookieJar *jar, SoupCookieJarTextPrivate *priv);
+
+void
+soup_cookie_jar_visionect_changed (SoupCookieJarTextPrivate *jar, SoupCookie *old_cookie, SoupCookie *new_cookie);
+
 int
 soup_cookie_jar_visionect_try_connect(SoupCookieJarTextPrivate *jar);
 

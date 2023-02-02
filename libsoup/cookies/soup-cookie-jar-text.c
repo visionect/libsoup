@@ -17,6 +17,15 @@
 #include "soup-cookie-jar-visionect.h"
 #include "soup.h"
 
+void
+soup_cookie_jar_visionect_finalize (SoupCookieJarTextPrivate *jar);
+
+int
+soup_cookie_jar_visionect_load (SoupCookieJar *jar, SoupCookieJarTextPrivate *priv);
+
+void
+soup_cookie_jar_visionect_changed (SoupCookieJarTextPrivate *jar, SoupCookie *old_cookie, SoupCookie *new_cookie);
+
 /**
  * SECTION:soup-cookie-jar-text
  * @short_description: Text-file-based ("cookies.txt") Cookie Jar
